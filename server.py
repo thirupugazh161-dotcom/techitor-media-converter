@@ -20,16 +20,17 @@ jobs = {}
 
 
 def get_duration(input_file):
-    """Get media duration in seconds using FFmpeg."""
+    """Get media duration using FFmpeg."""
 
     try:
         result = subprocess.run(
             [
                 FFMPEG,
+                "-hide_banner",
                 "-i",
                 input_file
             ],
-            stdout=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True
         )
@@ -44,7 +45,11 @@ def get_duration(input_file):
             minutes = int(match.group(2))
             seconds = float(match.group(3))
 
-            return hours * 3600 + minutes * 60 + seconds
+            return (
+                hours * 3600
+                + minutes * 60
+                + seconds
+            )
 
     except Exception:
         pass
@@ -52,22 +57,28 @@ def get_duration(input_file):
     return 0
 
 
-def run_conversion(job_id, input_file, output_file, output_format):
+def run_conversion(
+    job_id,
+    input_file,
+    output_file,
+    output_format
+):
 
-    jobs[job_id]["status"] = "converting"
-    jobs[job_id]["progress"] = 0
-    jobs[job_id]["message"] = "Converting..."
-
+    jobs[job_id].update({
+        "status": "converting",
+        "progress": 0,
+        "message": "Starting conversion..."
+    })
 
     duration = get_duration(input_file)
 
     command = [
         FFMPEG,
         "-y",
+        "-hide_banner",
         "-i",
         input_file
     ]
-
 
     # -----------------------------
     # OUTPUT SETTINGS
@@ -77,7 +88,7 @@ def run_conversion(job_id, input_file, output_file, output_format):
 
         command += [
             "-vn",
-            "-codec:a",
+            "-c:a",
             "libmp3lame",
             "-b:a",
             "192k"
@@ -87,7 +98,7 @@ def run_conversion(job_id, input_file, output_file, output_format):
 
         command += [
             "-vn",
-            "-codec:a",
+            "-c:a",
             "pcm_s16le"
         ]
 
@@ -95,7 +106,54 @@ def run_conversion(job_id, input_file, output_file, output_format):
 
         command += [
             "-vn",
-            "-codec:a",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k"
+        ]
+
+    elif output_format == "mp4":
+
+        command += [
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-movflags",
+            "+faststart"
+        ]
+
+    elif output_format == "mov":
+
+        command += [
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k"
+        ]
+
+    elif output_format == "mkv":
+
+        command += [
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-c:a",
             "aac",
             "-b:a",
             "192k"
@@ -106,45 +164,21 @@ def run_conversion(job_id, input_file, output_file, output_format):
         command += [
             "-c:v",
             "libvpx-vp9",
+            "-crf",
+            "30",
+            "-b:v",
+            "0",
             "-c:a",
             "libopus"
         ]
 
-    elif output_format == "mkv":
-
-        command += [
-            "-c:v",
-            "libx264",
-            "-c:a",
-            "aac"
-        ]
-
-    elif output_format == "mov":
-
-        command += [
-            "-c:v",
-            "libx264",
-            "-c:a",
-            "aac"
-        ]
-
-    else:
-
-        command += [
-            "-c:v",
-            "libx264",
-            "-c:a",
-            "aac"
-        ]
-
-
+    # Progress information
     command += [
         "-progress",
         "pipe:1",
         "-nostats",
         output_file
     ]
-
 
     try:
 
@@ -156,7 +190,26 @@ def run_conversion(job_id, input_file, output_file, output_format):
             bufsize=1
         )
 
+        # Read FFmpeg errors continuously
+        stderr_lines = []
 
+        def read_stderr():
+
+            for line in process.stderr:
+
+                line = line.strip()
+
+                if line:
+                    stderr_lines.append(line)
+
+        stderr_thread = threading.Thread(
+            target=read_stderr,
+            daemon=True
+        )
+
+        stderr_thread.start()
+
+        # Read progress
         for line in process.stdout:
 
             line = line.strip()
@@ -165,9 +218,11 @@ def run_conversion(job_id, input_file, output_file, output_format):
 
                 try:
 
-                    current_time = int(
-                        line.split("=")[1]
-                    ) / 1_000_000
+                    current_time = (
+                        int(
+                            line.split("=")[1]
+                        ) / 1_000_000
+                    )
 
                     if duration > 0:
 
@@ -177,7 +232,7 @@ def run_conversion(job_id, input_file, output_file, output_format):
 
                         progress = max(
                             0,
-                            min(99, progress)
+                            min(99.5, progress)
                         )
 
                         jobs[job_id]["progress"] = round(
@@ -185,54 +240,70 @@ def run_conversion(job_id, input_file, output_file, output_format):
                             1
                         )
 
+                        jobs[job_id]["message"] = (
+                            f"Converting... "
+                            f"{round(progress, 1)}%"
+                        )
+
                 except Exception:
                     pass
 
-
         process.wait()
 
+        stderr_thread.join(timeout=2)
+
+        # -----------------------------
+        # CONVERSION FAILED
+        # -----------------------------
 
         if process.returncode != 0:
 
-            error_output = process.stderr.read()
-
-            jobs[job_id]["status"] = "failed"
-
-            jobs[job_id]["message"] = (
-                "Conversion failed."
+            error_text = "\n".join(
+                stderr_lines
             )
 
-            jobs[job_id]["error"] = error_output[-2000:]
+            jobs[job_id].update({
+                "status": "failed",
+                "progress": 0,
+                "message": "Conversion failed.",
+                "error": error_text[-3000:]
+            })
 
             return
 
+        # Check output actually exists
+        if not os.path.exists(output_file):
 
-        jobs[job_id]["progress"] = 100
+            jobs[job_id].update({
+                "status": "failed",
+                "message": "Output file was not created.",
+                "error": "FFmpeg finished but output file is missing."
+            })
 
-        jobs[job_id]["status"] = "completed"
+            return
 
-        jobs[job_id]["message"] = (
-            "Conversion completed successfully!"
-        )
+        # -----------------------------
+        # SUCCESS
+        # -----------------------------
 
-        jobs[job_id]["download_url"] = (
-            f"/download?id={job_id}"
-        )
-
+        jobs[job_id].update({
+            "status": "completed",
+            "progress": 100,
+            "message": "Conversion completed successfully!",
+            "download_url": f"/download?id={job_id}"
+        })
 
     except Exception as e:
 
-        jobs[job_id]["status"] = "failed"
-
-        jobs[job_id]["message"] = (
-            "Conversion failed."
-        )
-
-        jobs[job_id]["error"] = str(e)
-
+        jobs[job_id].update({
+            "status": "failed",
+            "message": "Conversion failed.",
+            "error": str(e)
+        })
 
     finally:
 
+        # Remove input file
         if os.path.exists(input_file):
 
             try:
@@ -272,9 +343,7 @@ def convert():
             "error": "No file uploaded"
         }), 400
 
-
     file = request.files["file"]
-
 
     if file.filename == "":
 
@@ -282,12 +351,10 @@ def convert():
             "error": "No file selected"
         }), 400
 
-
     output_format = request.form.get(
         "format",
         "mp3"
     ).lower()
-
 
     allowed_formats = [
         "mp3",
@@ -299,66 +366,56 @@ def convert():
         "webm"
     ]
 
-
     if output_format not in allowed_formats:
 
         return jsonify({
             "error": "Unsupported format"
         }), 400
 
-
     job_id = uuid.uuid4().hex
-
 
     input_file = os.path.join(
         TEMP_DIR,
         f"{job_id}_input"
     )
 
-
     output_file = os.path.join(
         TEMP_DIR,
         f"{job_id}.{output_format}"
     )
 
+    try:
 
-    file.save(input_file)
+        file.save(input_file)
 
+    except Exception as e:
+
+        return jsonify({
+            "error": f"Upload failed: {str(e)}"
+        }), 500
 
     jobs[job_id] = {
-
         "status": "starting",
-
         "progress": 0,
-
         "message": "Preparing conversion..."
-
     }
 
-
     thread = threading.Thread(
-
         target=run_conversion,
-
         args=(
             job_id,
             input_file,
             output_file,
             output_format
         ),
-
         daemon=True
-
     )
-
 
     thread.start()
 
-
     return jsonify({
-
-        "job_id": job_id
-
+        "job_id": job_id,
+        "status": "starting"
     })
 
 
@@ -371,17 +428,13 @@ def progress():
 
     job_id = request.args.get("id")
 
-
     if not job_id or job_id not in jobs:
 
         return jsonify({
             "error": "Job not found"
         }), 404
 
-
-    return jsonify(
-        jobs[job_id]
-    )
+    return jsonify(jobs[job_id])
 
 
 # -----------------------------
@@ -393,16 +446,13 @@ def download():
 
     job_id = request.args.get("id")
 
-
     if not job_id or job_id not in jobs:
 
         return jsonify({
             "error": "Job not found"
         }), 404
 
-
     job = jobs[job_id]
-
 
     if job.get("status") != "completed":
 
@@ -410,27 +460,11 @@ def download():
             "error": "Conversion not completed"
         }), 400
 
-
-    download_url = job.get(
-        "download_url"
-    )
-
-
-    output_file = os.path.join(
-        TEMP_DIR,
-        job_id
-    )
-
-
-    # Find generated file
     matching_files = [
-
-        f for f in os.listdir(TEMP_DIR)
-
+        f
+        for f in os.listdir(TEMP_DIR)
         if f.startswith(job_id + ".")
-
     ]
-
 
     if not matching_files:
 
@@ -438,17 +472,17 @@ def download():
             "error": "Output file not found"
         }), 404
 
+    filename = matching_files[0]
 
     output_file = os.path.join(
         TEMP_DIR,
-        matching_files[0]
+        filename
     )
-
 
     return send_file(
         output_file,
         as_attachment=True,
-        download_name=matching_files[0]
+        download_name=filename
     )
 
 
@@ -467,5 +501,6 @@ if __name__ == "__main__":
 
     app.run(
         host="0.0.0.0",
-        port=port
+        port=port,
+        threaded=True
     )
