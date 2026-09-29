@@ -4,29 +4,53 @@ import uuid
 import threading
 import subprocess
 
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, send_from_directory
 import imageio_ffmpeg
 
 
-# =============================
+# ============================================================
 # APP SETUP
-# =============================
-
-app = Flask(__name__)
+# ============================================================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMP_DIR = os.path.join(BASE_DIR, "temp")
 
 os.makedirs(TEMP_DIR, exist_ok=True)
 
+app = Flask(__name__)
+
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 
 jobs = {}
 
 
-# =============================
+# ============================================================
+# STATIC FILES
+# ============================================================
+
+@app.route("/style.css")
+def style_css():
+    return send_from_directory(BASE_DIR, "style.css")
+
+
+@app.route("/script.js")
+def script_js():
+    return send_from_directory(BASE_DIR, "script.js")
+
+
+@app.route("/techitor-logo.png")
+def techitor_logo():
+    return send_from_directory(BASE_DIR, "techitor-logo.png")
+
+
+@app.route("/support-qr.png")
+def support_qr():
+    return send_from_directory(BASE_DIR, "support-qr.png")
+
+
+# ============================================================
 # GET MEDIA DURATION
-# =============================
+# ============================================================
 
 def get_duration(input_file):
 
@@ -68,9 +92,9 @@ def get_duration(input_file):
     return 0
 
 
-# =============================
+# ============================================================
 # RUN CONVERSION
-# =============================
+# ============================================================
 
 def run_conversion(
     job_id,
@@ -96,9 +120,9 @@ def run_conversion(
     ]
 
 
-    # =============================
+    # ========================================================
     # OUTPUT SETTINGS
-    # =============================
+    # ========================================================
 
     if output_format == "mp3":
 
@@ -195,9 +219,9 @@ def run_conversion(
         ]
 
 
-    # =============================
-    # PROGRESS OUTPUT
-    # =============================
+    # ========================================================
+    # PROGRESS
+    # ========================================================
 
     command += [
         "-progress",
@@ -221,9 +245,9 @@ def run_conversion(
         stderr_lines = []
 
 
-        # -----------------------------
+        # ----------------------------------------------------
         # READ STDERR
-        # -----------------------------
+        # ----------------------------------------------------
 
         def read_stderr():
 
@@ -232,7 +256,6 @@ def run_conversion(
                 line = line.strip()
 
                 if line:
-
                     stderr_lines.append(line)
 
 
@@ -244,13 +267,14 @@ def run_conversion(
         stderr_thread.start()
 
 
-        # -----------------------------
+        # ----------------------------------------------------
         # READ PROGRESS
-        # -----------------------------
+        # ----------------------------------------------------
 
         for line in process.stdout:
 
             line = line.strip()
+
 
             if line.startswith("out_time_ms="):
 
@@ -262,26 +286,31 @@ def run_conversion(
                         ) / 1_000_000
                     )
 
+
                     if duration > 0:
 
                         progress = (
                             current_time / duration
                         ) * 100
 
+
                         progress = max(
                             0,
                             min(99.5, progress)
                         )
+
 
                         jobs[job_id]["progress"] = round(
                             progress,
                             1
                         )
 
+
                         jobs[job_id]["message"] = (
                             f"Converting... "
                             f"{round(progress, 1)}%"
                         )
+
 
                 except Exception:
 
@@ -293,15 +322,16 @@ def run_conversion(
         stderr_thread.join(timeout=2)
 
 
-        # =============================
-        # FAILED
-        # =============================
+        # ====================================================
+        # CONVERSION FAILED
+        # ====================================================
 
         if process.returncode != 0:
 
             error_text = "\n".join(
                 stderr_lines
             )
+
 
             jobs[job_id].update({
                 "status": "failed",
@@ -313,9 +343,9 @@ def run_conversion(
             return
 
 
-        # =============================
-        # CHECK OUTPUT
-        # =============================
+        # ====================================================
+        # OUTPUT CHECK
+        # ====================================================
 
         if not os.path.exists(output_file):
 
@@ -329,14 +359,15 @@ def run_conversion(
             return
 
 
-        # =============================
+        # ====================================================
         # SUCCESS
-        # =============================
+        # ====================================================
 
         jobs[job_id].update({
             "status": "completed",
             "progress": 100,
             "message": "Conversion completed successfully!",
+            "filename": os.path.basename(output_file),
             "download_url": f"/download?id={job_id}"
         })
 
@@ -356,17 +387,15 @@ def run_conversion(
         if os.path.exists(input_file):
 
             try:
-
                 os.remove(input_file)
 
             except Exception:
-
                 pass
 
 
-# =============================
-# HOME
-# =============================
+# ============================================================
+# HOME PAGE
+# ============================================================
 
 @app.route("/")
 def home():
@@ -379,9 +408,9 @@ def home():
     )
 
 
-# =============================
+# ============================================================
 # START CONVERSION
-# =============================
+# ============================================================
 
 @app.route(
     "/convert",
@@ -430,6 +459,10 @@ def convert():
         }), 400
 
 
+    # --------------------------------------------------------
+    # CREATE JOB
+    # --------------------------------------------------------
+
     job_id = uuid.uuid4().hex
 
 
@@ -445,6 +478,10 @@ def convert():
     )
 
 
+    # --------------------------------------------------------
+    # SAVE UPLOAD
+    # --------------------------------------------------------
+
     try:
 
         file.save(input_file)
@@ -456,37 +493,60 @@ def convert():
         }), 500
 
 
+    # --------------------------------------------------------
+    # CREATE JOB STATUS
+    # --------------------------------------------------------
+
     jobs[job_id] = {
+
         "status": "starting",
+
         "progress": 0,
+
         "message": "Preparing conversion..."
+
     }
 
 
+    # --------------------------------------------------------
+    # START BACKGROUND CONVERSION
+    # --------------------------------------------------------
+
     thread = threading.Thread(
+
         target=run_conversion,
+
         args=(
             job_id,
             input_file,
             output_file,
             output_format
         ),
+
         daemon=True
+
     )
 
 
     thread.start()
 
 
+    # --------------------------------------------------------
+    # RETURN JOB ID
+    # --------------------------------------------------------
+
     return jsonify({
+
         "job_id": job_id,
+
         "status": "starting"
+
     })
 
 
-# =============================
+# ============================================================
 # PROGRESS
-# =============================
+# ============================================================
 
 @app.route("/progress")
 def progress():
@@ -494,7 +554,14 @@ def progress():
     job_id = request.args.get("id")
 
 
-    if not job_id or job_id not in jobs:
+    if not job_id:
+
+        return jsonify({
+            "error": "Missing job ID"
+        }), 400
+
+
+    if job_id not in jobs:
 
         return jsonify({
             "error": "Job not found"
@@ -506,9 +573,9 @@ def progress():
     )
 
 
-# =============================
+# ============================================================
 # DOWNLOAD
-# =============================
+# ============================================================
 
 @app.route("/download")
 def download():
@@ -516,7 +583,14 @@ def download():
     job_id = request.args.get("id")
 
 
-    if not job_id or job_id not in jobs:
+    if not job_id:
+
+        return jsonify({
+            "error": "Missing job ID"
+        }), 400
+
+
+    if job_id not in jobs:
 
         return jsonify({
             "error": "Job not found"
@@ -533,25 +607,14 @@ def download():
         }), 400
 
 
-    matching_files = [
-
-        f
-
-        for f in os.listdir(TEMP_DIR)
-
-        if f.startswith(job_id + ".")
-
-    ]
+    filename = job.get("filename")
 
 
-    if not matching_files:
+    if not filename:
 
         return jsonify({
-            "error": "Output file not found"
+            "error": "Output filename not found"
         }), 404
-
-
-    filename = matching_files[0]
 
 
     output_file = os.path.join(
@@ -560,16 +623,27 @@ def download():
     )
 
 
+    if not os.path.exists(output_file):
+
+        return jsonify({
+            "error": "Output file not found"
+        }), 404
+
+
     return send_file(
+
         output_file,
+
         as_attachment=True,
+
         download_name=filename
+
     )
 
 
-# =============================
+# ============================================================
 # SERVER
-# =============================
+# ============================================================
 
 if __name__ == "__main__":
 
@@ -582,7 +656,11 @@ if __name__ == "__main__":
 
 
     app.run(
+
         host="0.0.0.0",
+
         port=port,
+
         threaded=True
+
     )
