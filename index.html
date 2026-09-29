@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>TECHITOR'S MEDIA CONVERTER</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <header class="header">
+
+        <div class="brand">
+            <img src="techitor-logo.png" alt="Techitor Logo">
+            <div>
+                <h1>TECHITOR'S MEDIA CONVERTER</h1>
+                <p>Convert • Transform • Create</p>
+            </div>
+        </div>
+
+    </header>
+
+
+    <!-- MAIN -->
+    <main class="container">
+
+        <section class="hero">
+            <h2>Media Converter</h2>
+            <p>Convert your audio and video files easily.</p>
+        </section>
+
+
+        <!-- UPLOAD BOX -->
+        <section class="upload-box" id="dropZone">
+
+            <div class="upload-icon">↑</div>
+
+            <h3>Drop your file here</h3>
+
+            <p>or</p>
+
+            <button id="browseBtn" type="button">
+                Browse File
+            </button>
+
+            <input
+                type="file"
+                id="fileInput"
+                accept="audio/*,video/*"
+                hidden
+            >
+
+            <small>
+                MP3, WAV, M4A, MP4, MOV, MKV, WEBM
+            </small>
+
+        </section>
+
+
+        <!-- FILE SECTION -->
+        <section id="fileSection" class="file-section hidden">
+
+            <div class="file-header">
+                <div>
+                    <h3 id="fileName">No file selected</h3>
+                    <p id="fileSize">0 MB</p>
+                </div>
+
+                <button id="removeBtn" class="remove-btn">
+                    ×
+                </button>
+            </div>
+
+
+            <label for="formatSelect">Convert To</label>
+
+            <select id="formatSelect">
+                <option value="mp3">MP3</option>
+                <option value="wav">WAV</option>
+                <option value="m4a">M4A</option>
+                <option value="mp4">MP4</option>
+                <option value="mov">MOV</option>
+                <option value="mkv">MKV</option>
+                <option value="webm">WEBM</option>
+            </select>
+
+
+            <button id="convertBtn" class="convert-btn">
+                Convert
+            </button>
+
+
+            <!-- PROGRESS -->
+            <div id="progressSection" class="progress-section hidden">
+
+                <div class="progress-info">
+                    <span id="progressText">Converting...</span>
+                    <span id="progressPercent">0%</span>
+                </div>
+
+                <div class="progress-bar">
+                    <div id="progressFill"></div>
+                </div>
+
+                <p id="timeRemaining">
+                    Preparing conversion...
+                </p>
+
+            </div>
+
+
+            <!-- DOWNLOAD -->
+            <div id="downloadSection" class="download-section hidden">
+
+                <p id="successMessage">
+                    Conversion completed successfully!
+                </p>
+
+                <a id="downloadBtn" class="download-btn">
+                    Download File
+                </a>
+
+            </div>
+
+        </section>
+
+
+        <!-- SUPPORT -->
+        <section class="support-section">
+
+            <h2>☕ Enjoying Techitor's tools?</h2>
+
+            <p>
+                If this tool helped you, you can support the creator
+                with a small tip.
+            </p>
+
+            <img
+                src="support-qr.png"
+                alt="Support Techitor QR Code"
+                class="support-qr"
+            >
+
+            <p class="upi-text">
+                UPI ID: <strong>thirupugazhtilak@oksbi</strong>
+            </p>
+
+            <p class="tea-text">
+                ☕ Buy me a Tea & support Techitor!
+            </p>
+
+        </section>
+
+    </main>
+
+
+    <!-- FOOTER -->
+    <footer>
+
+        <p>Follow Techitor</p>
+
+        <div class="social-links">
+
+            <a
+                href="https://youtube.com/@techitor"
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                ▶ YouTube
+            </a>
+
+            <a
+                href="https://www.instagram.com/_techitor_"
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                ◎ Instagram
+            </a>
+
+        </div>
+
+        <p class="copyright">
+            © 2026 Techitor. All rights reserved.
+        </p>
+
+    </footer>
+
+
+    <script src="script.js"></script>
+
+</body>
+</html>
