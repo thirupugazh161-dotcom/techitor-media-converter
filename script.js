@@ -257,17 +257,25 @@ async function checkProgress(jobId) {
             );
 
 
-        if (!response.ok) {
+        const responseText = await response.text();
 
-            throw new Error(
-                "Unable to read progress."
-            );
-        }
+let result;
 
+try {
+    result = JSON.parse(responseText);
+} catch (e) {
+    throw new Error(
+        "Server returned an invalid response: " +
+        responseText.substring(0, 300)
+    );
+}
 
-        const data =
-            await response.json();
-
+if (!response.ok) {
+    throw new Error(
+        result.error ||
+        "Unable to start conversion."
+    );
+}
 
         const progress =
             Number(data.progress) || 0;
