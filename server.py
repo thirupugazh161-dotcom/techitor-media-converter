@@ -42,6 +42,7 @@ ALLOWED_EXTENSIONS = {
 
 
 def allowed_file(filename):
+
     if "." not in filename:
         return False
 
@@ -56,6 +57,7 @@ def allowed_file(filename):
 
 @app.route("/")
 def index():
+
     return send_from_directory(BASE_DIR, "index.html")
 
 
@@ -65,15 +67,23 @@ def index():
 
 @app.route("/<path:filename>")
 def static_files(filename):
+
     """
     Serve CSS, JS, images and other frontend files
     from the same directory as server.py.
     """
 
-    requested_path = os.path.join(BASE_DIR, filename)
+    requested_path = os.path.join(
+        BASE_DIR,
+        filename
+    )
 
     if os.path.isfile(requested_path):
-        return send_from_directory(BASE_DIR, filename)
+
+        return send_from_directory(
+            BASE_DIR,
+            filename
+        )
 
     return jsonify({
         "error": "File not found",
@@ -87,6 +97,7 @@ def static_files(filename):
 
 @app.route("/health", methods=["GET"])
 def health():
+
     return jsonify({
         "status": "ok",
         "service": "Techitor Media Converter",
@@ -103,6 +114,7 @@ def convert_media():
 
     # Check file
     if "file" not in request.files:
+
         return jsonify({
             "success": False,
             "error": "No file uploaded."
@@ -111,6 +123,7 @@ def convert_media():
     uploaded_file = request.files["file"]
 
     if uploaded_file.filename == "":
+
         return jsonify({
             "success": False,
             "error": "No file selected."
@@ -118,15 +131,20 @@ def convert_media():
 
     # Check extension
     if not allowed_file(uploaded_file.filename):
+
         return jsonify({
             "success": False,
             "error": "Unsupported input file format."
         }), 400
 
     # Requested output format
-    output_format = request.form.get("format", "mp3").lower()
+    output_format = request.form.get(
+        "format",
+        "mp3"
+    ).lower()
 
     if output_format not in ALLOWED_EXTENSIONS:
+
         return jsonify({
             "success": False,
             "error": "Unsupported output format."
@@ -136,9 +154,13 @@ def convert_media():
     # TEMP DIRECTORY
     # --------------------------------------------------
 
-    temp_dir = tempfile.mkdtemp(prefix="techitor_")
+    temp_dir = tempfile.mkdtemp(
+        prefix="techitor_"
+    )
 
-    original_name = secure_filename(uploaded_file.filename)
+    original_name = secure_filename(
+        uploaded_file.filename
+    )
 
     input_path = os.path.join(
         temp_dir,
@@ -147,9 +169,13 @@ def convert_media():
 
     uploaded_file.save(input_path)
 
-    base_name = os.path.splitext(original_name)[0]
+    base_name = os.path.splitext(
+        original_name
+    )[0]
 
-    output_filename = f"{base_name}_converted.{output_format}"
+    output_filename = (
+        f"{base_name}_converted.{output_format}"
+    )
 
     output_path = os.path.join(
         temp_dir,
@@ -197,11 +223,20 @@ def convert_media():
         ]
 
     # Video outputs
-    elif output_format in ["mp4", "mov", "mkv", "webm"]:
+    elif output_format in [
+        "mp4",
+        "mov",
+        "mkv",
+        "webm"
+    ]:
 
         if output_format == "webm":
 
             command += [
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a?",
                 "-c:v",
                 "libvpx-vp9",
                 "-c:a",
@@ -211,6 +246,10 @@ def convert_media():
         else:
 
             command += [
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a?",
                 "-c:v",
                 "libx264",
                 "-preset",
@@ -316,7 +355,12 @@ def page_not_found(error):
 
 if __name__ == "__main__":
 
-    port = int(os.environ.get("PORT", 10000))
+    port = int(
+        os.environ.get(
+            "PORT",
+            10000
+        )
+    )
 
     app.run(
         host="0.0.0.0",
