@@ -60,7 +60,6 @@ function selectFile(file) {
     fileSection.classList.remove("hidden");
 
     progressSection.classList.add("hidden");
-
     downloadSection.classList.add("hidden");
 
     progressFill.style.width = "0%";
@@ -72,6 +71,10 @@ function selectFile(file) {
 
     timeRemaining.textContent =
         "Ready to convert";
+
+    convertBtn.disabled = false;
+
+    convertBtn.textContent = "Convert";
 }
 
 
@@ -83,15 +86,13 @@ dropZone.addEventListener("dragover", function (event) {
 
     event.preventDefault();
 
-    dropZone.style.borderColor =
-        "#1677ff";
+    dropZone.style.borderColor = "#1677ff";
 });
 
 
 dropZone.addEventListener("dragleave", function () {
 
-    dropZone.style.borderColor =
-        "#46506a";
+    dropZone.style.borderColor = "#46506a";
 });
 
 
@@ -99,8 +100,7 @@ dropZone.addEventListener("drop", function (event) {
 
     event.preventDefault();
 
-    dropZone.style.borderColor =
-        "#46506a";
+    dropZone.style.borderColor = "#46506a";
 
     const files =
         event.dataTransfer.files;
@@ -132,6 +132,14 @@ removeBtn.addEventListener("click", function () {
     progressFill.style.width = "0%";
 
     progressPercent.textContent = "0%";
+
+    progressText.textContent = "";
+
+    timeRemaining.textContent = "";
+
+    convertBtn.disabled = false;
+
+    convertBtn.textContent = "Convert";
 });
 
 
@@ -250,11 +258,7 @@ convertBtn.addEventListener(
             }
 
 
-            const jobId =
-                result.job_id;
-
-
-            if (!jobId) {
+            if (!result.job_id) {
 
                 throw new Error(
                     "Server did not return a job ID."
@@ -262,14 +266,27 @@ convertBtn.addEventListener(
             }
 
 
+            const jobId =
+                result.job_id;
+
+
+            progressText.textContent =
+                "Preparing conversion...";
+
+
+            // -------------------------
             // START PROGRESS CHECK
+            // -------------------------
 
             checkProgress(jobId);
 
 
         } catch (error) {
 
-            console.error(error);
+            console.error(
+                "Conversion start error:",
+                error
+            );
 
 
             progressText.textContent =
@@ -281,7 +298,6 @@ convertBtn.addEventListener(
 
 
             convertBtn.disabled = false;
-
 
             convertBtn.textContent =
                 "Convert";
@@ -302,7 +318,10 @@ async function checkProgress(jobId) {
         const response =
             await fetch(
                 "/progress?id=" +
-                encodeURIComponent(jobId)
+                encodeURIComponent(jobId),
+                {
+                    cache: "no-store"
+                }
             );
 
 
@@ -310,12 +329,12 @@ async function checkProgress(jobId) {
             await response.text();
 
 
-        let data;
+        let result;
 
 
         try {
 
-            data =
+            result =
                 JSON.parse(responseText);
 
         } catch (e) {
@@ -329,10 +348,16 @@ async function checkProgress(jobId) {
         if (!response.ok) {
 
             throw new Error(
-                data.error ||
-                "Unable to read progress."
+                result.error ||
+                "Unable to read conversion progress."
             );
         }
+
+
+        // IMPORTANT:
+        // result contains the progress data
+
+        const data = result;
 
 
         // -------------------------
@@ -343,27 +368,40 @@ async function checkProgress(jobId) {
             Number(data.progress) || 0;
 
 
+        const safeProgress =
+            Math.max(
+                0,
+                Math.min(
+                    100,
+                    progress
+                )
+            );
+
+
         // -------------------------
         // UPDATE PROGRESS BAR
         // -------------------------
 
         progressFill.style.width =
-            progress + "%";
+            safeProgress + "%";
 
 
         progressPercent.textContent =
-            progress + "%";
+            safeProgress + "%";
 
 
         // -------------------------
         // STARTING
         // -------------------------
 
-        if (data.status === "starting") {
+        if (
+            data.status === "starting"
+        ) {
 
             progressText.textContent =
                 data.message ||
                 "Preparing conversion...";
+
 
             timeRemaining.textContent =
                 "Please wait...";
@@ -381,6 +419,7 @@ async function checkProgress(jobId) {
             progressText.textContent =
                 data.message ||
                 "Converting...";
+
 
             timeRemaining.textContent =
                 "Conversion in progress...";
@@ -404,16 +443,14 @@ async function checkProgress(jobId) {
 
 
             progressText.textContent =
-                "Conversion complete!";
+                "Conversion completed successfully!";
 
 
             timeRemaining.textContent =
-                "Your file is ready.";
+                "Your file is ready to download.";
 
 
-            convertBtn.disabled =
-                false;
-
+            convertBtn.disabled = false;
 
             convertBtn.textContent =
                 "Convert Again";
@@ -429,11 +466,7 @@ async function checkProgress(jobId) {
                 encodeURIComponent(jobId);
 
 
-            if (data.filename) {
-
-                downloadBtn.download =
-                    data.filename;
-            }
+            downloadBtn.download = "";
 
 
             return;
@@ -467,13 +500,16 @@ async function checkProgress(jobId) {
                 checkProgress(jobId);
 
             },
-            500
+            700
         );
 
 
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            "Progress error:",
+            error
+        );
 
 
         progressText.textContent =
@@ -484,9 +520,7 @@ async function checkProgress(jobId) {
             error.message;
 
 
-        convertBtn.disabled =
-            false;
-
+        convertBtn.disabled = false;
 
         convertBtn.textContent =
             "Convert";
