@@ -2,8 +2,9 @@ import os
 import subprocess
 import tempfile
 import shutil
+import uuid
 
-from flask import Flask, request, jsonify, send_from_directory, send_file
+from flask import Flask, request, jsonify, send_file, send_from_directory
 from werkzeug.utils import secure_filename
 import imageio_ffmpeg
 
@@ -30,7 +31,7 @@ FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
 # ALLOWED FORMATS
 # =========================================================
 
-ALLOWED_FORMATS = {
+ALLOWED_EXTENSIONS = {
     "mp3",
     "wav",
     "m4a",
@@ -42,7 +43,7 @@ ALLOWED_FORMATS = {
 
 
 # =========================================================
-# FILE VALIDATION
+# FILE CHECK
 # =========================================================
 
 def allowed_file(filename):
@@ -55,7 +56,29 @@ def allowed_file(filename):
 
     extension = filename.rsplit(".", 1)[1].lower()
 
-    return extension in ALLOWED_FORMATS
+    return extension in ALLOWED_EXTENSIONS
+
+
+# =========================================================
+# MIME TYPES
+# =========================================================
+
+def get_mimetype(extension):
+
+    mimetypes = {
+        "mp3": "audio/mpeg",
+        "wav": "audio/wav",
+        "m4a": "audio/mp4",
+        "mp4": "video/mp4",
+        "mov": "video/quicktime",
+        "mkv": "video/x-matroska",
+        "webm": "video/webm",
+    }
+
+    return mimetypes.get(
+        extension,
+        "application/octet-stream"
+    )
 
 
 # =========================================================
@@ -78,12 +101,12 @@ def index():
 @app.route("/<path:filename>")
 def static_files(filename):
 
-    requested_path = os.path.join(
+    path = os.path.join(
         BASE_DIR,
         filename
     )
 
-    if os.path.isfile(requested_path):
+    if os.path.isfile(path):
 
         return send_from_directory(
             BASE_DIR,
@@ -108,11 +131,11 @@ def health():
         "status": "ok",
         "service": "Techitor Media Converter",
         "ffmpeg": True
-    }), 200
+    })
 
 
 # =========================================================
-# CONVERT
+# CONVERSION
 # =========================================================
 
 @app.route("/api/convert", methods=["POST"])
@@ -123,7 +146,7 @@ def convert_media():
     try:
 
         # -------------------------------------------------
-        # CHECK FILE
+        # CHECK UPLOAD
         # -------------------------------------------------
 
         if "file" not in request.files:
@@ -133,14 +156,17 @@ def convert_media():
                 "error": "No file uploaded."
             }), 400
 
+
         uploaded_file = request.files["file"]
 
-        if not uploaded_file.filename:
+
+        if uploaded_file.filename == "":
 
             return jsonify({
                 "success": False,
                 "error": "No file selected."
             }), 400
+
 
         if not allowed_file(uploaded_file.filename):
 
@@ -154,23 +180,31 @@ def convert_media():
         # GET OUTPUT FORMAT
         # -------------------------------------------------
 
-        output_format = (
-            request.form.get("format")
-            or request.form.get("output_format")
-            or ""
+        output_format = request.form.get(
+            "format",
+            ""
         ).strip().lower()
 
 
-        if output_format not in ALLOWED_FORMATS:
+        # Also support output_format if frontend uses it
+        if not output_format:
+
+            output_format = request.form.get(
+                "output_format",
+                ""
+            ).strip().lower()
+
+
+        if output_format not in ALLOWED_EXTENSIONS:
 
             return jsonify({
                 "success": False,
-                "error": "Invalid output format."
+                "error": "Unsupported output format."
             }), 400
 
 
         # -------------------------------------------------
-        # TEMP DIRECTORY
+        # CREATE TEMP DIRECTORY
         # -------------------------------------------------
 
         temp_dir = tempfile.mkdtemp(
@@ -179,7 +213,7 @@ def convert_media():
 
 
         # -------------------------------------------------
-        # INPUT FILE
+        # INPUT
         # -------------------------------------------------
 
         original_name = secure_filename(
@@ -195,7 +229,7 @@ def convert_media():
 
 
         # -------------------------------------------------
-        # OUTPUT FILE
+        # OUTPUT
         # -------------------------------------------------
 
         base_name = os.path.splitext(
@@ -213,88 +247,182 @@ def convert_media():
 
 
         # =================================================
-        # FFMPEG BASE COMMAND
+        # BASE FFMPEG COMMAND
         # =================================================
 
         command = [
             FFMPEG_PATH,
+
             "-y",
+
             "-hide_banner",
+
             "-loglevel",
             "error",
+
+            # Important for Render memory usage
+            "-threads",
+            "1",
+
             "-i",
-            input_path
+            input_path,
         ]
 
 
         # =================================================
-        # AUDIO
+        # AUDIO OUTPUT
         # =================================================
 
         if output_format == "mp3":
 
             command += [
+
                 "-map",
                 "0:a:0",
+
                 "-vn",
+
                 "-c:a",
                 "libmp3lame",
+
                 "-b:a",
-                "192k"
+                "192k",
             ]
 
 
         elif output_format == "wav":
 
             command += [
+
                 "-map",
                 "0:a:0",
+
                 "-vn",
+
                 "-c:a",
-                "pcm_s16le"
+                "pcm_s16le",
             ]
 
 
         elif output_format == "m4a":
 
             command += [
+
                 "-map",
                 "0:a:0",
+
                 "-vn",
+
                 "-c:a",
                 "aac",
+
                 "-b:a",
-                "192k"
+                "192k",
             ]
 
 
         # =================================================
-        # VIDEO
+        # MP4
         # =================================================
 
-        elif output_format in {
-            "mp4",
-            "mov",
-            "mkv"
-        }:
+        elif output_format == "mp4":
 
             command += [
+
                 "-map",
                 "0:v:0",
+
                 "-map",
                 "0:a:0?",
+
                 "-c:v",
                 "libx264",
+
                 "-preset",
-                "medium",
+                "ultrafast",
+
                 "-crf",
-                "23",
+                "28",
+
                 "-pix_fmt",
                 "yuv420p",
+
                 "-c:a",
                 "aac",
+
                 "-b:a",
-                "192k"
+                "128k",
+
+                "-movflags",
+                "+faststart",
+            ]
+
+
+        # =================================================
+        # MOV
+        # =================================================
+
+        elif output_format == "mov":
+
+            command += [
+
+                "-map",
+                "0:v:0",
+
+                "-map",
+                "0:a:0?",
+
+                "-c:v",
+                "libx264",
+
+                "-preset",
+                "ultrafast",
+
+                "-crf",
+                "28",
+
+                "-pix_fmt",
+                "yuv420p",
+
+                "-c:a",
+                "aac",
+
+                "-b:a",
+                "128k",
+            ]
+
+
+        # =================================================
+        # MKV
+        # =================================================
+
+        elif output_format == "mkv":
+
+            command += [
+
+                "-map",
+                "0:v:0",
+
+                "-map",
+                "0:a:0?",
+
+                "-c:v",
+                "libx264",
+
+                "-preset",
+                "ultrafast",
+
+                "-crf",
+                "28",
+
+                "-pix_fmt",
+                "yuv420p",
+
+                "-c:a",
+                "aac",
+
+                "-b:a",
+                "128k",
             ]
 
 
@@ -305,28 +433,45 @@ def convert_media():
         elif output_format == "webm":
 
             command += [
+
                 "-map",
                 "0:v:0",
+
                 "-map",
                 "0:a:0?",
+
+                # VP8 is lighter than VP9
                 "-c:v",
                 "libvpx",
+
                 "-b:v",
                 "1M",
+
                 "-crf",
-                "30",
+                "32",
+
+                # Faster VP8 encoding
+                "-deadline",
+                "realtime",
+
+                "-cpu-used",
+                "8",
+
                 "-c:a",
                 "libopus",
+
                 "-b:a",
-                "128k"
+                "96k",
             ]
 
 
         # =================================================
-        # OUTPUT
+        # OUTPUT FILE
         # =================================================
 
-        command.append(output_path)
+        command.append(
+            output_path
+        )
 
 
         # =================================================
@@ -334,154 +479,154 @@ def convert_media():
         # =================================================
 
         result = subprocess.run(
+
             command,
+
             stdout=subprocess.PIPE,
+
             stderr=subprocess.PIPE,
+
             text=True,
-            timeout=600
+
+            timeout=900
         )
 
 
         # =================================================
-        # FFMPEG ERROR
+        # FFMPEG FAILED
         # =================================================
 
         if result.returncode != 0:
 
+            error_message = result.stderr.strip()
+
+            if not error_message:
+
+                error_message = (
+                    "FFmpeg conversion failed."
+                )
+
             return jsonify({
+
                 "success": False,
-                "error": "FFmpeg conversion failed.",
-                "details": result.stderr[-5000:]
+
+                "error": error_message[-5000:]
             }), 500
 
 
         # =================================================
-        # OUTPUT CHECK
+        # CHECK OUTPUT
         # =================================================
 
-        if not os.path.isfile(output_path):
+        if not os.path.exists(output_path):
 
             return jsonify({
+
                 "success": False,
-                "error": "Converted file was not created."
+
+                "error":
+                    "FFmpeg completed but output file was not created."
             }), 500
 
 
-        output_size = os.path.getsize(
-            output_path
-        )
-
-
-        if output_size == 0:
+        if os.path.getsize(output_path) == 0:
 
             return jsonify({
+
                 "success": False,
-                "error": "Converted file is empty."
+
+                "error":
+                    "FFmpeg created an empty output file."
             }), 500
 
 
         # =================================================
-        # SEND FILE
+        # SEND RESULT
         # =================================================
 
-        response = send_file(
+        return send_file(
+
             output_path,
-            mimetype=_get_mimetype(output_format),
+
+            mimetype=get_mimetype(
+                output_format
+            ),
+
             as_attachment=True,
-            download_name=output_filename,
-            conditional=False
+
+            download_name=output_filename
         )
-
-        response.headers["Cache-Control"] = "no-store"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-
-
-        return response
 
 
     except subprocess.TimeoutExpired:
 
         return jsonify({
+
             "success": False,
-            "error": "Conversion timed out."
+
+            "error":
+                "Conversion timed out. Try a shorter or smaller video."
         }), 500
 
 
     except Exception as e:
 
         return jsonify({
+
             "success": False,
+
             "error": str(e)
         }), 500
 
 
     finally:
 
-        # NOTE:
-        # Don't delete temp_dir here because send_file()
-        # still needs the output file while the response
-        # is being sent.
+        # -------------------------------------------------
+        # Cleanup is intentionally delayed by a small
+        # background process so send_file can finish.
+        # -------------------------------------------------
 
-        pass
+        if temp_dir:
 
+            try:
 
-# =========================================================
-# MIME TYPES
-# =========================================================
+                cleanup_script = f"""
+import shutil
+import time
 
-def _get_mimetype(extension):
+time.sleep(10)
 
-    mimetypes = {
+try:
+    shutil.rmtree({temp_dir!r})
+except:
+    pass
+"""
 
-        "mp3":
-            "audio/mpeg",
+                subprocess.Popen([
+                    "python",
+                    "-c",
+                    cleanup_script
+                ])
 
-        "wav":
-            "audio/wav",
+            except Exception:
 
-        "m4a":
-            "audio/mp4",
-
-        "mp4":
-            "video/mp4",
-
-        "mov":
-            "video/quicktime",
-
-        "mkv":
-            "video/x-matroska",
-
-        "webm":
-            "video/webm",
-    }
-
-    return mimetypes.get(
-        extension,
-        "application/octet-stream"
-    )
+                pass
 
 
 # =========================================================
-# ERROR HANDLERS
+# 413
 # =========================================================
 
 @app.errorhandler(413)
 def file_too_large(error):
 
     return jsonify({
+
         "success": False,
-        "error": "File is too large. Maximum allowed size is 500 MB."
+
+        "error":
+            "File is too large. Maximum size is 500 MB."
     }), 413
-
-
-@app.errorhandler(404)
-def page_not_found(error):
-
-    return jsonify({
-        "success": False,
-        "error": "Page not found."
-    }), 404
 
 
 # =========================================================
