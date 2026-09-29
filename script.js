@@ -1,3 +1,12 @@
+// ============================================================
+// TECHITOR MEDIA CONVERTER - FRONTEND SCRIPT
+// ============================================================
+
+
+// ------------------------------------------------------------
+// ELEMENTS
+// ------------------------------------------------------------
+
 const fileInput = document.getElementById("fileInput");
 const browseBtn = document.getElementById("browseBtn");
 const dropZone = document.getElementById("dropZone");
@@ -19,161 +28,302 @@ const timeRemaining = document.getElementById("timeRemaining");
 const downloadSection = document.getElementById("downloadSection");
 const downloadBtn = document.getElementById("downloadBtn");
 
+
+// ------------------------------------------------------------
+// VARIABLES
+// ------------------------------------------------------------
+
 let selectedFile = null;
+let currentJobId = null;
+let progressTimer = null;
 
 
-// -----------------------------
+// ------------------------------------------------------------
+// SAFETY CHECK
+// ------------------------------------------------------------
+
+console.log("Techitor Media Converter JS loaded");
+
+
+// ------------------------------------------------------------
 // BROWSE FILE
-// -----------------------------
+// ------------------------------------------------------------
 
-browseBtn.addEventListener("click", function () {
-    fileInput.click();
-});
+if (browseBtn && fileInput) {
 
+    browseBtn.addEventListener("click", function () {
 
-fileInput.addEventListener("change", function () {
+        fileInput.click();
 
-    if (fileInput.files.length === 0) {
-        return;
-    }
+    });
 
-    selectFile(fileInput.files[0]);
-});
-
-
-// -----------------------------
-// SELECT FILE
-// -----------------------------
-
-function selectFile(file) {
-
-    selectedFile = file;
-
-    fileName.textContent = file.name;
-
-    const sizeMB =
-        file.size / (1024 * 1024);
-
-    fileSize.textContent =
-        sizeMB.toFixed(2) + " MB";
-
-    fileSection.classList.remove("hidden");
-
-    progressSection.classList.add("hidden");
-    downloadSection.classList.add("hidden");
-
-    progressFill.style.width = "0%";
-
-    progressPercent.textContent = "0%";
-
-    progressText.textContent =
-        "Ready to convert";
-
-    timeRemaining.textContent =
-        "Ready to convert";
-
-    convertBtn.disabled = false;
-
-    convertBtn.textContent = "Convert";
 }
 
 
-// -----------------------------
-// DRAG & DROP
-// -----------------------------
+// ------------------------------------------------------------
+// FILE INPUT CHANGE
+// ------------------------------------------------------------
 
-dropZone.addEventListener("dragover", function (event) {
+if (fileInput) {
 
-    event.preventDefault();
+    fileInput.addEventListener("change", function () {
 
-    dropZone.style.borderColor = "#1677ff";
-});
+        if (!fileInput.files || fileInput.files.length === 0) {
+            return;
+        }
+
+        selectFile(fileInput.files[0]);
+
+    });
+
+}
 
 
-dropZone.addEventListener("dragleave", function () {
+// ------------------------------------------------------------
+// SELECT FILE
+// ------------------------------------------------------------
 
-    dropZone.style.borderColor = "#46506a";
-});
+function selectFile(file) {
+
+    if (!file) {
+        return;
+    }
+
+    selectedFile = file;
+
+    console.log("Selected file:", file.name);
 
 
-dropZone.addEventListener("drop", function (event) {
+    // File name
 
-    event.preventDefault();
+    if (fileName) {
+        fileName.textContent = file.name;
+    }
 
-    dropZone.style.borderColor = "#46506a";
 
-    const files =
-        event.dataTransfer.files;
+    // File size
 
-    if (files.length > 0) {
+    const sizeMB = file.size / (1024 * 1024);
 
-        selectFile(files[0]);
+    if (fileSize) {
+
+        if (sizeMB < 1) {
+
+            const sizeKB = file.size / 1024;
+
+            fileSize.textContent =
+                sizeKB.toFixed(2) + " KB";
+
+        } else {
+
+            fileSize.textContent =
+                sizeMB.toFixed(2) + " MB";
+
+        }
 
     }
-});
 
 
-// -----------------------------
-// REMOVE FILE
-// -----------------------------
+    // Show file section
 
-removeBtn.addEventListener("click", function () {
-
-    selectedFile = null;
-
-    fileInput.value = "";
-
-    fileSection.classList.add("hidden");
-
-    progressSection.classList.add("hidden");
-
-    downloadSection.classList.add("hidden");
-
-    progressFill.style.width = "0%";
-
-    progressPercent.textContent = "0%";
-
-    progressText.textContent = "";
-
-    timeRemaining.textContent = "";
-
-    convertBtn.disabled = false;
-
-    convertBtn.textContent = "Convert";
-});
+    if (fileSection) {
+        fileSection.classList.remove("hidden");
+    }
 
 
-// -----------------------------
-// CONVERT
-// -----------------------------
+    // Hide old result
 
-convertBtn.addEventListener(
-    "click",
-    async function () {
+    if (progressSection) {
+        progressSection.classList.add("hidden");
+    }
 
-        if (!selectedFile) {
+    if (downloadSection) {
+        downloadSection.classList.add("hidden");
+    }
 
-            alert(
-                "Please select a file first."
-            );
 
+    // Reset progress
+
+    resetProgress();
+
+}
+
+
+// ------------------------------------------------------------
+// RESET PROGRESS
+// ------------------------------------------------------------
+
+function resetProgress() {
+
+    if (progressFill) {
+        progressFill.style.width = "0%";
+    }
+
+    if (progressPercent) {
+        progressPercent.textContent = "0%";
+    }
+
+    if (progressText) {
+        progressText.textContent = "Ready to convert";
+    }
+
+    if (timeRemaining) {
+        timeRemaining.textContent = "Ready";
+    }
+
+}
+
+
+// ------------------------------------------------------------
+// DRAG OVER
+// ------------------------------------------------------------
+
+if (dropZone) {
+
+    dropZone.addEventListener("dragover", function (event) {
+
+        event.preventDefault();
+
+        dropZone.style.borderColor = "#1677ff";
+
+    });
+
+
+    // --------------------------------------------------------
+    // DRAG LEAVE
+    // --------------------------------------------------------
+
+    dropZone.addEventListener("dragleave", function () {
+
+        dropZone.style.borderColor = "#46506a";
+
+    });
+
+
+    // --------------------------------------------------------
+    // DROP
+    // --------------------------------------------------------
+
+    dropZone.addEventListener("drop", function (event) {
+
+        event.preventDefault();
+
+        dropZone.style.borderColor = "#46506a";
+
+
+        const files = event.dataTransfer.files;
+
+
+        if (!files || files.length === 0) {
             return;
         }
 
 
+        selectFile(files[0]);
+
+    });
+
+}
+
+
+// ------------------------------------------------------------
+// REMOVE FILE
+// ------------------------------------------------------------
+
+if (removeBtn) {
+
+    removeBtn.addEventListener("click", function () {
+
+        selectedFile = null;
+        currentJobId = null;
+
+
+        // Stop progress polling
+
+        if (progressTimer) {
+
+            clearTimeout(progressTimer);
+
+            progressTimer = null;
+
+        }
+
+
+        // Reset input
+
+        if (fileInput) {
+            fileInput.value = "";
+        }
+
+
+        // Hide sections
+
+        if (fileSection) {
+            fileSection.classList.add("hidden");
+        }
+
+        if (progressSection) {
+            progressSection.classList.add("hidden");
+        }
+
+        if (downloadSection) {
+            downloadSection.classList.add("hidden");
+        }
+
+
+        resetProgress();
+
+    });
+
+}
+
+
+// ------------------------------------------------------------
+// CONVERT BUTTON
+// ------------------------------------------------------------
+
+if (convertBtn) {
+
+    convertBtn.addEventListener("click", async function () {
+
+        // ----------------------------------------------------
+        // CHECK FILE
+        // ----------------------------------------------------
+
+        if (!selectedFile) {
+
+            alert("Please select a file first.");
+
+            return;
+
+        }
+
+
+        // ----------------------------------------------------
+        // GET FORMAT
+        // ----------------------------------------------------
+
         const format =
-            formatSelect.value;
+            formatSelect
+                ? formatSelect.value.toLowerCase()
+                : "mp3";
 
 
-        const formData =
-            new FormData();
+        console.log("Starting conversion");
+        console.log("File:", selectedFile.name);
+        console.log("Format:", format);
 
+
+        // ----------------------------------------------------
+        // CREATE FORM DATA
+        // ----------------------------------------------------
+
+        const formData = new FormData();
 
         formData.append(
             "file",
             selectedFile
         );
-
 
         formData.append(
             "format",
@@ -181,56 +331,93 @@ convertBtn.addEventListener(
         );
 
 
+        // ----------------------------------------------------
+        // BUTTON STATE
+        // ----------------------------------------------------
+
         convertBtn.disabled = true;
 
-        convertBtn.textContent =
-            "Starting...";
+        convertBtn.textContent = "Starting...";
 
 
-        progressSection.classList.remove(
-            "hidden"
-        );
+        // ----------------------------------------------------
+        // SHOW PROGRESS
+        // ----------------------------------------------------
+
+        if (progressSection) {
+            progressSection.classList.remove("hidden");
+        }
+
+        if (downloadSection) {
+            downloadSection.classList.add("hidden");
+        }
 
 
-        downloadSection.classList.add(
-            "hidden"
-        );
+        if (progressFill) {
+            progressFill.style.width = "0%";
+        }
+
+        if (progressPercent) {
+            progressPercent.textContent = "0%";
+        }
+
+        if (progressText) {
+            progressText.textContent =
+                "Preparing conversion...";
+        }
+
+        if (timeRemaining) {
+            timeRemaining.textContent =
+                "Please wait...";
+        }
 
 
-        progressFill.style.width =
-            "0%";
+        // ----------------------------------------------------
+        // STOP OLD TIMER
+        // ----------------------------------------------------
 
+        if (progressTimer) {
 
-        progressPercent.textContent =
-            "0%";
+            clearTimeout(progressTimer);
 
+            progressTimer = null;
 
-        progressText.textContent =
-            "Starting conversion...";
-
-
-        timeRemaining.textContent =
-            "Please wait...";
+        }
 
 
         try {
 
-            // -------------------------
-            // START CONVERSION
-            // -------------------------
+            // ------------------------------------------------
+            // SEND FILE TO SERVER
+            // ------------------------------------------------
 
-            const response =
-                await fetch(
-                    "/convert",
-                    {
-                        method: "POST",
-                        body: formData
-                    }
-                );
+            const response = await fetch(
+                "/convert",
+                {
+                    method: "POST",
+                    body: formData
+                }
+            );
 
+
+            console.log(
+                "Convert response status:",
+                response.status
+            );
+
+
+            // ------------------------------------------------
+            // READ RESPONSE
+            // ------------------------------------------------
 
             const responseText =
                 await response.text();
+
+
+            console.log(
+                "Convert response:",
+                responseText
+            );
 
 
             let result;
@@ -241,134 +428,237 @@ convertBtn.addEventListener(
                 result =
                     JSON.parse(responseText);
 
-            } catch (e) {
+            } catch (jsonError) {
 
                 throw new Error(
                     "Server returned an invalid response."
                 );
+
             }
 
+
+            // ------------------------------------------------
+            // SERVER ERROR
+            // ------------------------------------------------
 
             if (!response.ok) {
 
                 throw new Error(
                     result.error ||
+                    result.message ||
                     "Unable to start conversion."
                 );
+
             }
 
 
-            if (!result.job_id) {
+            // ------------------------------------------------
+            // GET JOB ID
+            // ------------------------------------------------
+
+            const jobId =
+                result.job_id ||
+                result.id ||
+                result.jobId;
+
+
+            if (!jobId) {
 
                 throw new Error(
                     "Server did not return a job ID."
                 );
+
             }
 
 
-            const jobId =
-                result.job_id;
+            currentJobId = jobId;
 
 
-            progressText.textContent =
-                "Preparing conversion...";
+            console.log(
+                "Conversion Job ID:",
+                currentJobId
+            );
 
 
-            // -------------------------
+            // ------------------------------------------------
             // START PROGRESS CHECK
-            // -------------------------
+            // ------------------------------------------------
 
-            checkProgress(jobId);
+            if (progressText) {
+                progressText.textContent =
+                    "Conversion started...";
+            }
+
+
+            checkProgress(currentJobId);
 
 
         } catch (error) {
 
             console.error(
-                "Conversion start error:",
+                "Conversion error:",
                 error
             );
 
 
-            progressText.textContent =
-                "Conversion failed.";
+            showConversionError(
+                error.message ||
+                "Conversion failed."
+            );
 
-
-            timeRemaining.textContent =
-                error.message;
-
-
-            convertBtn.disabled = false;
-
-            convertBtn.textContent =
-                "Convert";
         }
 
-    }
-);
+    });
+
+}
 
 
-// -----------------------------
+// ============================================================
 // CHECK PROGRESS
-// -----------------------------
+// ============================================================
 
 async function checkProgress(jobId) {
 
+    if (!jobId) {
+
+        showConversionError(
+            "Invalid conversion job ID."
+        );
+
+        return;
+
+    }
+
+
     try {
 
-        const response =
-            await fetch(
-                "/progress?id=" +
-                encodeURIComponent(jobId),
-                {
-                    cache: "no-store"
-                }
-            );
+        console.log(
+            "Checking progress:",
+            jobId
+        );
 
+
+        // ----------------------------------------------------
+        // REQUEST PROGRESS
+        // ----------------------------------------------------
+
+        const response = await fetch(
+            "/progress?id=" +
+            encodeURIComponent(jobId),
+            {
+                method: "GET",
+                cache: "no-store"
+            }
+        );
+
+
+        console.log(
+            "Progress HTTP status:",
+            response.status
+        );
+
+
+        // ----------------------------------------------------
+        // READ RESPONSE AS TEXT FIRST
+        // ----------------------------------------------------
 
         const responseText =
             await response.text();
 
 
-        let result;
+        console.log(
+            "Progress response:",
+            responseText
+        );
+
+
+        // ----------------------------------------------------
+        // EMPTY RESPONSE
+        // ----------------------------------------------------
+
+        if (!responseText || !responseText.trim()) {
+
+            throw new Error(
+                "Server returned an empty progress response."
+            );
+
+        }
+
+
+        // ----------------------------------------------------
+        // PARSE JSON
+        // ----------------------------------------------------
+
+        let data;
 
 
         try {
 
-            result =
+            data =
                 JSON.parse(responseText);
 
-        } catch (e) {
+        } catch (jsonError) {
+
+            console.error(
+                "Invalid JSON from /progress:",
+                responseText
+            );
+
 
             throw new Error(
                 "Server returned an invalid progress response."
             );
+
         }
 
+
+        // ----------------------------------------------------
+        // HTTP ERROR
+        // ----------------------------------------------------
 
         if (!response.ok) {
 
             throw new Error(
-                result.error ||
-                "Unable to read conversion progress."
+                data.error ||
+                data.message ||
+                "Unable to check conversion progress."
             );
+
         }
 
 
-        // IMPORTANT:
-        // result contains the progress data
+        // ----------------------------------------------------
+        // NORMALIZE DATA
+        // ----------------------------------------------------
 
-        const data = result;
-
-
-        // -------------------------
-        // GET PROGRESS
-        // -------------------------
-
-        const progress =
-            Number(data.progress) || 0;
+        const status =
+            String(
+                data.status ||
+                "starting"
+            ).toLowerCase();
 
 
-        const safeProgress =
+        let progress =
+            Number(
+                data.progress
+            );
+
+
+        // Invalid progress = 0
+
+        if (
+            Number.isNaN(progress) ||
+            !Number.isFinite(progress)
+        ) {
+
+            progress = 0;
+
+        }
+
+
+        // Keep between 0 and 100
+
+        progress =
             Math.max(
                 0,
                 Math.min(
@@ -378,152 +668,356 @@ async function checkProgress(jobId) {
             );
 
 
-        // -------------------------
+        console.log(
+            "Status:",
+            status,
+            "Progress:",
+            progress
+        );
+
+
+        // ----------------------------------------------------
         // UPDATE PROGRESS BAR
-        // -------------------------
+        // ----------------------------------------------------
 
-        progressFill.style.width =
-            safeProgress + "%";
-
-
-        progressPercent.textContent =
-            safeProgress + "%";
-
-
-        // -------------------------
-        // STARTING
-        // -------------------------
-
-        if (
-            data.status === "starting"
-        ) {
-
-            progressText.textContent =
-                data.message ||
-                "Preparing conversion...";
-
-
-            timeRemaining.textContent =
-                "Please wait...";
-        }
-
-
-        // -------------------------
-        // CONVERTING
-        // -------------------------
-
-        else if (
-            data.status === "converting"
-        ) {
-
-            progressText.textContent =
-                data.message ||
-                "Converting...";
-
-
-            timeRemaining.textContent =
-                "Conversion in progress...";
-        }
-
-
-        // -------------------------
-        // COMPLETED
-        // -------------------------
-
-        else if (
-            data.status === "completed"
-        ) {
+        if (progressFill) {
 
             progressFill.style.width =
-                "100%";
+                progress + "%";
 
-
-            progressPercent.textContent =
-                "100%";
-
-
-            progressText.textContent =
-                "Conversion completed successfully!";
-
-
-            timeRemaining.textContent =
-                "Your file is ready to download.";
-
-
-            convertBtn.disabled = false;
-
-            convertBtn.textContent =
-                "Convert Again";
-
-
-            downloadSection.classList.remove(
-                "hidden"
-            );
-
-
-            downloadBtn.href =
-                "/download?id=" +
-                encodeURIComponent(jobId);
-
-
-            downloadBtn.download = "";
-
-
-            return;
         }
 
 
-        // -------------------------
-        // FAILED
-        // -------------------------
+        if (progressPercent) {
+
+            progressPercent.textContent =
+                Math.round(progress) + "%";
+
+        }
+
+
+        // ====================================================
+        // STARTING
+        // ====================================================
+
+        if (
+            status === "starting" ||
+            status === "queued" ||
+            status === "pending"
+        ) {
+
+            if (progressText) {
+
+                progressText.textContent =
+                    "Preparing conversion...";
+
+            }
+
+
+            if (timeRemaining) {
+
+                timeRemaining.textContent =
+                    "Please wait...";
+
+            }
+
+        }
+
+
+        // ====================================================
+        // CONVERTING
+        // ====================================================
 
         else if (
-            data.status === "failed" ||
-            data.status === "error"
+            status === "converting" ||
+            status === "processing" ||
+            status === "running"
+        ) {
+
+            if (progressText) {
+
+                progressText.textContent =
+                    "Converting...";
+
+            }
+
+
+            if (timeRemaining) {
+
+                timeRemaining.textContent =
+                    "Conversion in progress...";
+
+            }
+
+        }
+
+
+        // ====================================================
+        // COMPLETED
+        // ====================================================
+
+        else if (
+            status === "completed" ||
+            status === "complete" ||
+            status === "success" ||
+            status === "finished"
+        ) {
+
+            conversionCompleted(
+                jobId,
+                data
+            );
+
+            return;
+
+        }
+
+
+        // ====================================================
+        // ERROR
+        // ====================================================
+
+        else if (
+            status === "error" ||
+            status === "failed" ||
+            status === "failure"
         ) {
 
             throw new Error(
                 data.error ||
                 data.message ||
-                "Conversion failed."
+                "Conversion failed on the server."
             );
+
         }
 
 
-        // -------------------------
-        // CHECK AGAIN
-        // -------------------------
+        // ====================================================
+        // CONTINUE POLLING
+        // ====================================================
 
-        setTimeout(
-            function () {
+        progressTimer =
+            setTimeout(
+                function () {
 
-                checkProgress(jobId);
+                    checkProgress(jobId);
 
-            },
-            700
-        );
+                },
+                1000
+            );
 
 
     } catch (error) {
 
         console.error(
-            "Progress error:",
+            "Progress check error:",
             error
         );
 
 
+        showConversionError(
+            error.message ||
+            "Unable to check conversion progress."
+        );
+
+    }
+
+}
+
+
+// ============================================================
+// CONVERSION COMPLETED
+// ============================================================
+
+function conversionCompleted(jobId, data) {
+
+    console.log(
+        "Conversion completed:",
+        data
+    );
+
+
+    // --------------------------------------------------------
+    // PROGRESS = 100
+    // --------------------------------------------------------
+
+    if (progressFill) {
+
+        progressFill.style.width =
+            "100%";
+
+    }
+
+
+    if (progressPercent) {
+
+        progressPercent.textContent =
+            "100%";
+
+    }
+
+
+    // --------------------------------------------------------
+    // STATUS TEXT
+    // --------------------------------------------------------
+
+    if (progressText) {
+
+        progressText.textContent =
+            "Conversion complete!";
+
+    }
+
+
+    if (timeRemaining) {
+
+        timeRemaining.textContent =
+            "Your file is ready.";
+
+    }
+
+
+    // --------------------------------------------------------
+    // BUTTON
+    // --------------------------------------------------------
+
+    if (convertBtn) {
+
+        convertBtn.disabled = false;
+
+        convertBtn.textContent =
+            "Convert Again";
+
+    }
+
+
+    // --------------------------------------------------------
+    // SHOW DOWNLOAD
+    // --------------------------------------------------------
+
+    if (downloadSection) {
+
+        downloadSection.classList.remove(
+            "hidden"
+        );
+
+    }
+
+
+    // --------------------------------------------------------
+    // DOWNLOAD URL
+    // --------------------------------------------------------
+
+    if (downloadBtn) {
+
+        downloadBtn.href =
+            "/download?id=" +
+            encodeURIComponent(jobId);
+
+
+        // ----------------------------------------------------
+        // FILENAME
+        // ----------------------------------------------------
+
+        let filename =
+            data.filename ||
+            data.file_name ||
+            data.output_filename;
+
+
+        if (!filename) {
+
+            filename =
+                "converted-file";
+
+        }
+
+
+        downloadBtn.download =
+            filename;
+
+    }
+
+
+    currentJobId = null;
+
+}
+
+
+// ============================================================
+// SHOW ERROR
+// ============================================================
+
+function showConversionError(message) {
+
+    console.error(
+        "FINAL ERROR:",
+        message
+    );
+
+
+    if (progressText) {
+
         progressText.textContent =
             "Conversion failed.";
 
+    }
+
+
+    if (timeRemaining) {
 
         timeRemaining.textContent =
-            error.message;
+            message;
 
+    }
+
+
+    if (progressFill) {
+
+        progressFill.style.width =
+            "0%";
+
+    }
+
+
+    if (progressPercent) {
+
+        progressPercent.textContent =
+            "0%";
+
+    }
+
+
+    if (convertBtn) {
 
         convertBtn.disabled = false;
 
         convertBtn.textContent =
             "Convert";
+
     }
 
+
+    // Don't hide progress section.
+    // User can see the actual error.
+
+
 }
+
+
+// ============================================================
+// PAGE CLEANUP
+// ============================================================
+
+window.addEventListener(
+    "beforeunload",
+    function () {
+
+        if (progressTimer) {
+
+            clearTimeout(progressTimer);
+
+        }
+
+    }
+);
