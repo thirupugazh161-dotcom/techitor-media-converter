@@ -1,10 +1,8 @@
 import os
 import subprocess
 import tempfile
-import shutil
-import uuid
 
-from flask import Flask, request, jsonify, send_file, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from werkzeug.utils import secure_filename
 import imageio_ffmpeg
 
@@ -17,6 +15,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 app = Flask(__name__, static_folder=None)
 
+# 500 MB maximum upload
 app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024
 
 
@@ -28,10 +27,49 @@ FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
 
 
 # =========================================================
-# ALLOWED FORMATS
+# INPUT FORMATS
+# =========================================================
+# Keep this separate from output formats.
+# FFmpeg can read many more video formats than the
+# formats offered in the output dropdown.
+
+ALLOWED_INPUT_EXTENSIONS = {
+    # Common video
+    "mp4",
+    "mov",
+    "mkv",
+    "webm",
+    "avi",
+    "flv",
+    "wmv",
+    "m4v",
+    "mpeg",
+    "mpg",
+    "m2v",
+    "3gp",
+    "3g2",
+    "ts",
+    "mts",
+    "m2ts",
+    "vob",
+    "ogv",
+
+    # Common audio
+    "mp3",
+    "wav",
+    "m4a",
+    "aac",
+    "flac",
+    "ogg",
+    "opus",
+}
+
+
+# =========================================================
+# OUTPUT FORMATS
 # =========================================================
 
-ALLOWED_EXTENSIONS = {
+ALLOWED_OUTPUT_FORMATS = {
     "mp3",
     "wav",
     "m4a",
@@ -43,20 +81,22 @@ ALLOWED_EXTENSIONS = {
 
 
 # =========================================================
-# FILE CHECK
+# FILE VALIDATION
 # =========================================================
 
-def allowed_file(filename):
+def get_extension(filename):
 
-    if not filename:
-        return False
+    if not filename or "." not in filename:
+        return ""
 
-    if "." not in filename:
-        return False
+    return filename.rsplit(".", 1)[1].lower()
 
-    extension = filename.rsplit(".", 1)[1].lower()
 
-    return extension in ALLOWED_EXTENSIONS
+def allowed_input_file(filename):
+
+    extension = get_extension(filename)
+
+    return extension in ALLOWED_INPUT_EXTENSIONS
 
 
 # =========================================================
@@ -66,13 +106,27 @@ def allowed_file(filename):
 def get_mimetype(extension):
 
     mimetypes = {
-        "mp3": "audio/mpeg",
-        "wav": "audio/wav",
-        "m4a": "audio/mp4",
-        "mp4": "video/mp4",
-        "mov": "video/quicktime",
-        "mkv": "video/x-matroska",
-        "webm": "video/webm",
+
+        "mp3":
+            "audio/mpeg",
+
+        "wav":
+            "audio/wav",
+
+        "m4a":
+            "audio/mp4",
+
+        "mp4":
+            "video/mp4",
+
+        "mov":
+            "video/quicktime",
+
+        "mkv":
+            "video/x-matroska",
+
+        "webm":
+            "video/webm",
     }
 
     return mimetypes.get(
@@ -101,12 +155,12 @@ def index():
 @app.route("/<path:filename>")
 def static_files(filename):
 
-    path = os.path.join(
+    requested_path = os.path.join(
         BASE_DIR,
         filename
     )
 
-    if os.path.isfile(path):
+    if os.path.isfile(requested_path):
 
         return send_from_directory(
             BASE_DIR,
@@ -131,7 +185,309 @@ def health():
         "status": "ok",
         "service": "Techitor Media Converter",
         "ffmpeg": True
-    })
+    }), 200
+
+
+# =========================================================
+# BUILD VIDEO COMMAND
+# =========================================================
+
+def build_video_command(
+    input_path,
+    output_path,
+    output_format
+):
+
+    command = [
+        FFMPEG_PATH,
+
+        "-y",
+
+        "-hide_banner",
+
+        "-loglevel",
+        "error",
+
+        # Reduce CPU/RAM pressure on Render
+        "-threads",
+        "1",
+
+        "-i",
+        input_path,
+
+        # First video stream
+        "-map",
+        "0:v:0",
+
+        # Audio is optional.
+        # This allows silent videos to convert.
+        "-map",
+        "0:a:0?",
+
+        # Make dimensions compatible with yuv420p.
+        # Prevents errors such as:
+        # "width not divisible by 2"
+        "-vf",
+        "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+    ]
+
+
+    # =====================================================
+    # MP4
+    # =====================================================
+
+    if output_format == "mp4":
+
+        command += [
+
+            "-c:v",
+            "libx264",
+
+            "-preset",
+            "ultrafast",
+
+            "-crf",
+            "28",
+
+            "-pix_fmt",
+            "yuv420p",
+
+            "-c:a",
+            "aac",
+
+            "-b:a",
+            "128k",
+
+            "-movflags",
+            "+faststart",
+
+            "-f",
+            "mp4",
+        ]
+
+
+    # =====================================================
+    # MOV
+    # =====================================================
+
+    elif output_format == "mov":
+
+        command += [
+
+            "-c:v",
+            "libx264",
+
+            "-preset",
+            "ultrafast",
+
+            "-crf",
+            "28",
+
+            "-pix_fmt",
+            "yuv420p",
+
+            "-c:a",
+            "aac",
+
+            "-b:a",
+            "128k",
+
+            "-f",
+            "mov",
+        ]
+
+
+    # =====================================================
+    # MKV
+    # =====================================================
+
+    elif output_format == "mkv":
+
+        command += [
+
+            "-c:v",
+            "libx264",
+
+            "-preset",
+            "ultrafast",
+
+            "-crf",
+            "28",
+
+            "-pix_fmt",
+            "yuv420p",
+
+            "-c:a",
+            "aac",
+
+            "-b:a",
+            "128k",
+
+            "-f",
+            "matroska",
+        ]
+
+
+    # =====================================================
+    # WEBM
+    # =====================================================
+
+    elif output_format == "webm":
+
+        command += [
+
+            # VP8 instead of VP9.
+            # Much lighter for the Render instance.
+            "-c:v",
+            "libvpx",
+
+            "-b:v",
+            "1M",
+
+            "-crf",
+            "32",
+
+            "-deadline",
+            "realtime",
+
+            "-cpu-used",
+            "8",
+
+            "-pix_fmt",
+            "yuv420p",
+
+            "-c:a",
+            "libopus",
+
+            "-b:a",
+            "96k",
+
+            "-f",
+            "webm",
+        ]
+
+
+    else:
+
+        raise ValueError(
+            "Unsupported video output format."
+        )
+
+
+    command.append(output_path)
+
+    return command
+
+
+# =========================================================
+# BUILD AUDIO COMMAND
+# =========================================================
+
+def build_audio_command(
+    input_path,
+    output_path,
+    output_format
+):
+
+    command = [
+
+        FFMPEG_PATH,
+
+        "-y",
+
+        "-hide_banner",
+
+        "-loglevel",
+        "error",
+
+        "-threads",
+        "1",
+
+        "-i",
+        input_path,
+
+        # First audio stream
+        "-map",
+        "0:a:0",
+
+        "-vn",
+    ]
+
+
+    if output_format == "mp3":
+
+        command += [
+
+            "-c:a",
+            "libmp3lame",
+
+            "-b:a",
+            "192k",
+
+            "-f",
+            "mp3",
+        ]
+
+
+    elif output_format == "wav":
+
+        command += [
+
+            "-c:a",
+            "pcm_s16le",
+
+            "-f",
+            "wav",
+        ]
+
+
+    elif output_format == "m4a":
+
+        command += [
+
+            "-c:a",
+            "aac",
+
+            "-b:a",
+            "192k",
+
+            "-f",
+            "ipod",
+        ]
+
+
+    else:
+
+        raise ValueError(
+            "Unsupported audio output format."
+        )
+
+
+    command.append(output_path)
+
+    return command
+
+
+# =========================================================
+# RUN FFMPEG
+# =========================================================
+
+def run_ffmpeg(command):
+
+    result = subprocess.run(
+
+        command,
+
+        stdout=subprocess.PIPE,
+
+        stderr=subprocess.PIPE,
+
+        text=True,
+
+        timeout=900
+    )
+
+    return result
 
 
 # =========================================================
@@ -146,7 +502,7 @@ def convert_media():
     try:
 
         # -------------------------------------------------
-        # CHECK UPLOAD
+        # FILE
         # -------------------------------------------------
 
         if "file" not in request.files:
@@ -160,7 +516,7 @@ def convert_media():
         uploaded_file = request.files["file"]
 
 
-        if uploaded_file.filename == "":
+        if not uploaded_file.filename:
 
             return jsonify({
                 "success": False,
@@ -168,43 +524,47 @@ def convert_media():
             }), 400
 
 
-        if not allowed_file(uploaded_file.filename):
+        # -------------------------------------------------
+        # INPUT FORMAT
+        # -------------------------------------------------
+
+        if not allowed_input_file(
+            uploaded_file.filename
+        ):
 
             return jsonify({
+
                 "success": False,
-                "error": "Unsupported input file format."
+
+                "error":
+                    "Unsupported input file format."
             }), 400
 
 
         # -------------------------------------------------
-        # GET OUTPUT FORMAT
+        # OUTPUT FORMAT
         # -------------------------------------------------
 
-        output_format = request.form.get(
-            "format",
-            ""
+        output_format = (
+            request.form.get("format")
+            or request.form.get("output_format")
+            or ""
         ).strip().lower()
 
 
-        # Also support output_format if frontend uses it
-        if not output_format:
-
-            output_format = request.form.get(
-                "output_format",
-                ""
-            ).strip().lower()
-
-
-        if output_format not in ALLOWED_EXTENSIONS:
+        if output_format not in ALLOWED_OUTPUT_FORMATS:
 
             return jsonify({
+
                 "success": False,
-                "error": "Unsupported output format."
+
+                "error":
+                    "Unsupported output format."
             }), 400
 
 
         # -------------------------------------------------
-        # CREATE TEMP DIRECTORY
+        # TEMP DIRECTORY
         # -------------------------------------------------
 
         temp_dir = tempfile.mkdtemp(
@@ -213,7 +573,7 @@ def convert_media():
 
 
         # -------------------------------------------------
-        # INPUT
+        # INPUT FILE
         # -------------------------------------------------
 
         original_name = secure_filename(
@@ -225,11 +585,13 @@ def convert_media():
             original_name
         )
 
-        uploaded_file.save(input_path)
+        uploaded_file.save(
+            input_path
+        )
 
 
         # -------------------------------------------------
-        # OUTPUT
+        # OUTPUT FILE
         # -------------------------------------------------
 
         base_name = os.path.splitext(
@@ -247,278 +609,81 @@ def convert_media():
 
 
         # =================================================
-        # BASE FFMPEG COMMAND
+        # AUDIO
         # =================================================
 
-        command = [
-            FFMPEG_PATH,
+        if output_format in {
+            "mp3",
+            "wav",
+            "m4a"
+        }:
 
-            "-y",
+            command = build_audio_command(
 
-            "-hide_banner",
+                input_path,
 
-            "-loglevel",
-            "error",
+                output_path,
 
-            # Important for Render memory usage
-            "-threads",
-            "1",
-
-            "-i",
-            input_path,
-        ]
+                output_format
+            )
 
 
         # =================================================
-        # AUDIO OUTPUT
+        # VIDEO
         # =================================================
 
-        if output_format == "mp3":
+        else:
 
-            command += [
+            command = build_video_command(
 
-                "-map",
-                "0:a:0",
+                input_path,
 
-                "-vn",
+                output_path,
 
-                "-c:a",
-                "libmp3lame",
+                output_format
+            )
 
-                "-b:a",
-                "192k",
-            ]
 
+        # -------------------------------------------------
+        # RUN
+        # -------------------------------------------------
 
-        elif output_format == "wav":
-
-            command += [
-
-                "-map",
-                "0:a:0",
-
-                "-vn",
-
-                "-c:a",
-                "pcm_s16le",
-            ]
-
-
-        elif output_format == "m4a":
-
-            command += [
-
-                "-map",
-                "0:a:0",
-
-                "-vn",
-
-                "-c:a",
-                "aac",
-
-                "-b:a",
-                "192k",
-            ]
-
-
-        # =================================================
-        # MP4
-        # =================================================
-
-        elif output_format == "mp4":
-
-            command += [
-
-                "-map",
-                "0:v:0",
-
-                "-map",
-                "0:a:0?",
-
-                "-c:v",
-                "libx264",
-
-                "-preset",
-                "ultrafast",
-
-                "-crf",
-                "28",
-
-                "-pix_fmt",
-                "yuv420p",
-
-                "-c:a",
-                "aac",
-
-                "-b:a",
-                "128k",
-
-                "-movflags",
-                "+faststart",
-            ]
-
-
-        # =================================================
-        # MOV
-        # =================================================
-
-        elif output_format == "mov":
-
-            command += [
-
-                "-map",
-                "0:v:0",
-
-                "-map",
-                "0:a:0?",
-
-                "-c:v",
-                "libx264",
-
-                "-preset",
-                "ultrafast",
-
-                "-crf",
-                "28",
-
-                "-pix_fmt",
-                "yuv420p",
-
-                "-c:a",
-                "aac",
-
-                "-b:a",
-                "128k",
-            ]
-
-
-        # =================================================
-        # MKV
-        # =================================================
-
-        elif output_format == "mkv":
-
-            command += [
-
-                "-map",
-                "0:v:0",
-
-                "-map",
-                "0:a:0?",
-
-                "-c:v",
-                "libx264",
-
-                "-preset",
-                "ultrafast",
-
-                "-crf",
-                "28",
-
-                "-pix_fmt",
-                "yuv420p",
-
-                "-c:a",
-                "aac",
-
-                "-b:a",
-                "128k",
-            ]
-
-
-        # =================================================
-        # WEBM
-        # =================================================
-
-        elif output_format == "webm":
-
-            command += [
-
-                "-map",
-                "0:v:0",
-
-                "-map",
-                "0:a:0?",
-
-                # VP8 is lighter than VP9
-                "-c:v",
-                "libvpx",
-
-                "-b:v",
-                "1M",
-
-                "-crf",
-                "32",
-
-                # Faster VP8 encoding
-                "-deadline",
-                "realtime",
-
-                "-cpu-used",
-                "8",
-
-                "-c:a",
-                "libopus",
-
-                "-b:a",
-                "96k",
-            ]
-
-
-        # =================================================
-        # OUTPUT FILE
-        # =================================================
-
-        command.append(
-            output_path
+        result = run_ffmpeg(
+            command
         )
 
 
-        # =================================================
-        # RUN FFMPEG
-        # =================================================
-
-        result = subprocess.run(
-
-            command,
-
-            stdout=subprocess.PIPE,
-
-            stderr=subprocess.PIPE,
-
-            text=True,
-
-            timeout=900
-        )
-
-
-        # =================================================
-        # FFMPEG FAILED
-        # =================================================
+        # -------------------------------------------------
+        # FAILED
+        # -------------------------------------------------
 
         if result.returncode != 0:
 
-            error_message = result.stderr.strip()
+            error_text = (
+                result.stderr.strip()
+                or "FFmpeg conversion failed."
+            )
 
-            if not error_message:
-
-                error_message = (
-                    "FFmpeg conversion failed."
-                )
 
             return jsonify({
 
                 "success": False,
 
-                "error": error_message[-5000:]
+                "error":
+                    "Conversion failed.",
+
+                "details":
+                    error_text[-8000:]
             }), 500
 
 
-        # =================================================
-        # CHECK OUTPUT
-        # =================================================
+        # -------------------------------------------------
+        # OUTPUT CHECK
+        # -------------------------------------------------
 
-        if not os.path.exists(output_path):
+        if not os.path.isfile(
+            output_path
+        ):
 
             return jsonify({
 
@@ -529,22 +694,24 @@ def convert_media():
             }), 500
 
 
-        if os.path.getsize(output_path) == 0:
+        if os.path.getsize(
+            output_path
+        ) == 0:
 
             return jsonify({
 
                 "success": False,
 
                 "error":
-                    "FFmpeg created an empty output file."
+                    "The converted file is empty."
             }), 500
 
 
-        # =================================================
-        # SEND RESULT
-        # =================================================
+        # -------------------------------------------------
+        # SEND FILE
+        # -------------------------------------------------
 
-        return send_file(
+        response = send_file(
 
             output_path,
 
@@ -554,9 +721,31 @@ def convert_media():
 
             as_attachment=True,
 
-            download_name=output_filename
+            download_name=output_filename,
+
+            conditional=False
         )
 
+
+        response.headers[
+            "Cache-Control"
+        ] = "no-store"
+
+        response.headers[
+            "Pragma"
+        ] = "no-cache"
+
+        response.headers[
+            "X-Content-Type-Options"
+        ] = "nosniff"
+
+
+        return response
+
+
+    # =====================================================
+    # TIMEOUT
+    # =====================================================
 
     except subprocess.TimeoutExpired:
 
@@ -565,9 +754,13 @@ def convert_media():
             "success": False,
 
             "error":
-                "Conversion timed out. Try a shorter or smaller video."
+                "Conversion timed out. Try a smaller or shorter video."
         }), 500
 
+
+    # =====================================================
+    # OTHER ERROR
+    # =====================================================
 
     except Exception as e:
 
@@ -575,46 +768,30 @@ def convert_media():
 
             "success": False,
 
-            "error": str(e)
+            "error":
+                str(e)
         }), 500
 
 
+    # =====================================================
+    # CLEANUP
+    # =====================================================
+
     finally:
 
-        # -------------------------------------------------
-        # Cleanup is intentionally delayed by a small
-        # background process so send_file can finish.
-        # -------------------------------------------------
+        # Do not delete the temporary directory here.
+        #
+        # send_file() may still be reading the output.
+        #
+        # Render will clean temporary files when the
+        # instance restarts. The files are also isolated
+        # per request.
 
-        if temp_dir:
-
-            try:
-
-                cleanup_script = f"""
-import shutil
-import time
-
-time.sleep(10)
-
-try:
-    shutil.rmtree({temp_dir!r})
-except:
-    pass
-"""
-
-                subprocess.Popen([
-                    "python",
-                    "-c",
-                    cleanup_script
-                ])
-
-            except Exception:
-
-                pass
+        pass
 
 
 # =========================================================
-# 413
+# FILE TOO LARGE
 # =========================================================
 
 @app.errorhandler(413)
@@ -625,8 +802,24 @@ def file_too_large(error):
         "success": False,
 
         "error":
-            "File is too large. Maximum size is 500 MB."
+            "File is too large. Maximum allowed size is 500 MB."
     }), 413
+
+
+# =========================================================
+# NOT FOUND
+# =========================================================
+
+@app.errorhandler(404)
+def page_not_found(error):
+
+    return jsonify({
+
+        "success": False,
+
+        "error":
+            "Page not found."
+    }), 404
 
 
 # =========================================================
@@ -643,7 +836,10 @@ if __name__ == "__main__":
     )
 
     app.run(
+
         host="0.0.0.0",
+
         port=port,
+
         debug=False
     )
