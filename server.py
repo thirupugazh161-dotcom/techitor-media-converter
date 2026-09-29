@@ -1,16 +1,14 @@
 import os
-import re
 import uuid
 import threading
 import subprocess
-
-from flask import Flask, request, jsonify, send_file, send_from_directory
 import imageio_ffmpeg
 
+from flask import Flask, request, jsonify, send_file
 
-# ============================================================
+# =========================================================
 # APP SETUP
-# ============================================================
+# =========================================================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMP_DIR = os.path.join(BASE_DIR, "temp")
@@ -24,626 +22,437 @@ FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 jobs = {}
 
 
-# ============================================================
-# STATIC FILES
-# ============================================================
+# =========================================================
+# FORMAT SETTINGS
+# =========================================================
 
-@app.route("/style.css")
-def style_css():
-    return send_from_directory(BASE_DIR, "style.css")
+VIDEO_FORMATS = {
+    "mp4": {
+        "extension": "mp4",
+        "args": [
+            "-c:v", "libx264",
+            "-preset", "medium",
+            "-crf", "23",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-movflags", "+faststart"
+        ]
+    },
+
+    "mov": {
+        "extension": "mov",
+        "args": [
+            "-c:v", "libx264",
+            "-preset", "medium",
+            "-crf", "23",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-movflags", "+faststart"
+        ]
+    },
+
+    "mkv": {
+        "extension": "mkv",
+        "args": [
+            "-c:v", "libx264",
+            "-preset", "medium",
+            "-crf", "23",
+            "-c:a", "aac",
+            "-b:a", "192k"
+        ]
+    },
+
+    "webm": {
+        "extension": "webm",
+        "args": [
+            "-c:v", "libvpx-vp9",
+            "-crf", "30",
+            "-b:v", "0",
+            "-c:a", "libopus",
+            "-b:a", "128k"
+        ]
+    }
+}
 
 
-@app.route("/script.js")
-def script_js():
-    return send_from_directory(BASE_DIR, "script.js")
+AUDIO_FORMATS = {
+    "mp3": {
+        "extension": "mp3",
+        "args": [
+            "-vn",
+            "-c:a", "libmp3lame",
+            "-b:a", "192k"
+        ]
+    },
+
+    "wav": {
+        "extension": "wav",
+        "args": [
+            "-vn",
+            "-c:a", "pcm_s16le"
+        ]
+    },
+
+    "m4a": {
+        "extension": "m4a",
+        "args": [
+            "-vn",
+            "-c:a", "aac",
+            "-b:a", "192k"
+        ]
+    }
+}
 
 
-@app.route("/techitor-logo.png")
-def techitor_logo():
-    return send_from_directory(BASE_DIR, "techitor-logo.png")
+# =========================================================
+# HEALTH CHECK
+# =========================================================
+
+@app.route("/")
+def home():
+    return "Techitor Media Converter Server Running"
 
 
-@app.route("/support-qr.png")
-def support_qr():
-    return send_from_directory(BASE_DIR, "support-qr.png")
+# =========================================================
+# UPLOAD + CONVERSION
+# =========================================================
 
-
-# ============================================================
-# GET MEDIA DURATION
-# ============================================================
-
-def get_duration(input_file):
+@app.route("/convert", methods=["POST"])
+def convert():
 
     try:
 
-        result = subprocess.run(
-            [
-                FFMPEG,
-                "-hide_banner",
-                "-i",
-                input_file
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True
+        if "file" not in request.files:
+            return jsonify({
+                "error": "No file uploaded"
+            }), 400
+
+        uploaded_file = request.files["file"]
+
+        if uploaded_file.filename == "":
+            return jsonify({
+                "error": "No file selected"
+            }), 400
+
+        output_format = request.form.get("format", "").lower().strip()
+
+        if not output_format:
+            return jsonify({
+                "error": "No output format selected"
+            }), 400
+
+        if (
+            output_format not in VIDEO_FORMATS
+            and output_format not in AUDIO_FORMATS
+        ):
+            return jsonify({
+                "error": f"Unsupported format: {output_format}"
+            }), 400
+
+        # -------------------------------------------------
+        # Create unique job
+        # -------------------------------------------------
+
+        job_id = str(uuid.uuid4())
+
+        original_name = os.path.basename(uploaded_file.filename)
+
+        name_without_ext = os.path.splitext(original_name)[0]
+
+        input_path = os.path.join(
+            TEMP_DIR,
+            f"{job_id}_input{os.path.splitext(original_name)[1]}"
         )
 
-        match = re.search(
-            r"Duration:\s*(\d+):(\d+):([\d.]+)",
-            result.stderr
+        output_path = os.path.join(
+            TEMP_DIR,
+            f"{job_id}_{name_without_ext}.{output_format}"
         )
 
-        if match:
+        uploaded_file.save(input_path)
 
-            hours = int(match.group(1))
-            minutes = int(match.group(2))
-            seconds = float(match.group(3))
+        jobs[job_id] = {
+            "status": "starting",
+            "progress": 0,
+            "message": "Preparing conversion...",
+            "output": None,
+            "error": None
+        }
 
-            return (
-                hours * 3600
-                + minutes * 60
-                + seconds
+        # -------------------------------------------------
+        # Start background conversion
+        # -------------------------------------------------
+
+        thread = threading.Thread(
+            target=run_conversion,
+            args=(
+                job_id,
+                input_path,
+                output_path,
+                output_format
             )
+        )
 
-    except Exception:
+        thread.daemon = True
+        thread.start()
 
-        pass
+        return jsonify({
+            "success": True,
+            "job_id": job_id
+        })
 
-    return 0
+    except Exception as e:
+
+        return jsonify({
+            "error": str(e)
+        }), 500
 
 
-# ============================================================
-# RUN CONVERSION
-# ============================================================
+# =========================================================
+# RUN FFMPEG CONVERSION
+# =========================================================
 
 def run_conversion(
     job_id,
-    input_file,
-    output_file,
+    input_path,
+    output_path,
     output_format
 ):
 
-    jobs[job_id].update({
-        "status": "converting",
-        "progress": 0,
-        "message": "Starting conversion..."
-    })
-
-    duration = get_duration(input_file)
-
-    command = [
-        FFMPEG,
-        "-y",
-        "-hide_banner",
-        "-i",
-        input_file
-    ]
-
-
-    # ========================================================
-    # OUTPUT SETTINGS
-    # ========================================================
-
-    if output_format == "mp3":
-
-        command += [
-            "-vn",
-            "-c:a",
-            "libmp3lame",
-            "-b:a",
-            "192k"
-        ]
-
-
-    elif output_format == "wav":
-
-        command += [
-            "-vn",
-            "-c:a",
-            "pcm_s16le"
-        ]
-
-
-    elif output_format == "m4a":
-
-        command += [
-            "-vn",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k"
-        ]
-
-
-    elif output_format == "mp4":
-
-        command += [
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "23",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-movflags",
-            "+faststart"
-        ]
-
-
-    elif output_format == "mov":
-
-        command += [
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "23",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k"
-        ]
-
-
-    elif output_format == "mkv":
-
-        command += [
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "23",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k"
-        ]
-
-
-    elif output_format == "webm":
-
-        command += [
-            "-c:v",
-            "libvpx-vp9",
-            "-crf",
-            "30",
-            "-b:v",
-            "0",
-            "-c:a",
-            "libopus"
-        ]
-
-
-    # ========================================================
-    # PROGRESS
-    # ========================================================
-
-    command += [
-        "-progress",
-        "pipe:1",
-        "-nostats",
-        output_file
-    ]
-
-
     try:
+
+        jobs[job_id]["status"] = "converting"
+        jobs[job_id]["progress"] = 5
+        jobs[job_id]["message"] = "Converting..."
+
+        # -------------------------------------------------
+        # Select codec settings
+        # -------------------------------------------------
+
+        if output_format in VIDEO_FORMATS:
+
+            format_config = VIDEO_FORMATS[output_format]
+
+        else:
+
+            format_config = AUDIO_FORMATS[output_format]
+
+        command = [
+            FFMPEG,
+
+            "-y",
+
+            "-i",
+            input_path
+        ]
+
+        # -------------------------------------------------
+        # Add conversion arguments
+        # -------------------------------------------------
+
+        command.extend(format_config["args"])
+
+        command.append(output_path)
+
+        # -------------------------------------------------
+        # Execute FFmpeg
+        # -------------------------------------------------
 
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
+            universal_newlines=True,
             bufsize=1
         )
 
+        stdout, stderr = process.communicate()
 
-        stderr_lines = []
-
-
-        # ----------------------------------------------------
-        # READ STDERR
-        # ----------------------------------------------------
-
-        def read_stderr():
-
-            for line in process.stderr:
-
-                line = line.strip()
-
-                if line:
-                    stderr_lines.append(line)
-
-
-        stderr_thread = threading.Thread(
-            target=read_stderr,
-            daemon=True
-        )
-
-        stderr_thread.start()
-
-
-        # ----------------------------------------------------
-        # READ PROGRESS
-        # ----------------------------------------------------
-
-        for line in process.stdout:
-
-            line = line.strip()
-
-
-            if line.startswith("out_time_ms="):
-
-                try:
-
-                    current_time = (
-                        int(
-                            line.split("=")[1]
-                        ) / 1_000_000
-                    )
-
-
-                    if duration > 0:
-
-                        progress = (
-                            current_time / duration
-                        ) * 100
-
-
-                        progress = max(
-                            0,
-                            min(99.5, progress)
-                        )
-
-
-                        jobs[job_id]["progress"] = round(
-                            progress,
-                            1
-                        )
-
-
-                        jobs[job_id]["message"] = (
-                            f"Converting... "
-                            f"{round(progress, 1)}%"
-                        )
-
-
-                except Exception:
-
-                    pass
-
-
-        process.wait()
-
-        stderr_thread.join(timeout=2)
-
-
-        # ====================================================
-        # CONVERSION FAILED
-        # ====================================================
+        # -------------------------------------------------
+        # Check result
+        # -------------------------------------------------
 
         if process.returncode != 0:
 
-            error_text = "\n".join(
-                stderr_lines
+            print("FFMPEG ERROR:")
+            print(stderr)
+
+            jobs[job_id]["status"] = "failed"
+            jobs[job_id]["progress"] = 0
+            jobs[job_id]["message"] = (
+                "Conversion failed: "
+                + get_ffmpeg_error(stderr)
+            )
+            jobs[job_id]["error"] = stderr
+
+            cleanup_file(input_path)
+
+            return
+
+        # -------------------------------------------------
+        # Verify output file
+        # -------------------------------------------------
+
+        if not os.path.exists(output_path):
+
+            jobs[job_id]["status"] = "failed"
+            jobs[job_id]["progress"] = 0
+            jobs[job_id]["message"] = (
+                "FFmpeg completed but output file was not created."
             )
 
-
-            jobs[job_id].update({
-                "status": "failed",
-                "progress": 0,
-                "message": "Conversion failed.",
-                "error": error_text[-3000:]
-            })
+            cleanup_file(input_path)
 
             return
 
-
-        # ====================================================
-        # OUTPUT CHECK
-        # ====================================================
-
-        if not os.path.exists(output_file):
-
-            jobs[job_id].update({
-                "status": "failed",
-                "progress": 0,
-                "message": "Output file was not created.",
-                "error": "FFmpeg finished but output file is missing."
-            })
-
-            return
-
-
-        # ====================================================
+        # -------------------------------------------------
         # SUCCESS
-        # ====================================================
+        # -------------------------------------------------
 
-        jobs[job_id].update({
-            "status": "completed",
-            "progress": 100,
-            "message": "Conversion completed successfully!",
-            "filename": os.path.basename(output_file),
-            "download_url": f"/download?id={job_id}"
-        })
+        jobs[job_id]["status"] = "completed"
+        jobs[job_id]["progress"] = 100
+        jobs[job_id]["message"] = "Conversion completed successfully!"
+        jobs[job_id]["output"] = output_path
 
+        cleanup_file(input_path)
 
     except Exception as e:
 
-        jobs[job_id].update({
-            "status": "failed",
-            "progress": 0,
-            "message": "Conversion failed.",
-            "error": str(e)
-        })
+        print("CONVERSION EXCEPTION:")
+        print(str(e))
+
+        jobs[job_id]["status"] = "failed"
+        jobs[job_id]["progress"] = 0
+        jobs[job_id]["message"] = str(e)
+        jobs[job_id]["error"] = str(e)
+
+        cleanup_file(input_path)
 
 
-    finally:
-
-        if os.path.exists(input_file):
-
-            try:
-                os.remove(input_file)
-
-            except Exception:
-                pass
-
-
-# ============================================================
-# HOME PAGE
-# ============================================================
-
-@app.route("/")
-def home():
-
-    return send_file(
-        os.path.join(
-            BASE_DIR,
-            "index.html"
-        )
-    )
-
-
-# ============================================================
-# START CONVERSION
-# ============================================================
-
-@app.route(
-    "/convert",
-    methods=["POST"]
-)
-def convert():
-
-    if "file" not in request.files:
-
-        return jsonify({
-            "error": "No file uploaded"
-        }), 400
-
-
-    file = request.files["file"]
-
-
-    if file.filename == "":
-
-        return jsonify({
-            "error": "No file selected"
-        }), 400
-
-
-    output_format = request.form.get(
-        "format",
-        "mp3"
-    ).lower()
-
-
-    allowed_formats = [
-        "mp3",
-        "wav",
-        "m4a",
-        "mp4",
-        "mov",
-        "mkv",
-        "webm"
-    ]
-
-
-    if output_format not in allowed_formats:
-
-        return jsonify({
-            "error": "Unsupported format"
-        }), 400
-
-
-    # --------------------------------------------------------
-    # CREATE JOB
-    # --------------------------------------------------------
-
-    job_id = uuid.uuid4().hex
-
-
-    input_file = os.path.join(
-        TEMP_DIR,
-        f"{job_id}_input"
-    )
-
-
-    output_file = os.path.join(
-        TEMP_DIR,
-        f"{job_id}.{output_format}"
-    )
-
-
-    # --------------------------------------------------------
-    # SAVE UPLOAD
-    # --------------------------------------------------------
-
-    try:
-
-        file.save(input_file)
-
-    except Exception as e:
-
-        return jsonify({
-            "error": f"Upload failed: {str(e)}"
-        }), 500
-
-
-    # --------------------------------------------------------
-    # CREATE JOB STATUS
-    # --------------------------------------------------------
-
-    jobs[job_id] = {
-
-        "status": "starting",
-
-        "progress": 0,
-
-        "message": "Preparing conversion..."
-
-    }
-
-
-    # --------------------------------------------------------
-    # START BACKGROUND CONVERSION
-    # --------------------------------------------------------
-
-    thread = threading.Thread(
-
-        target=run_conversion,
-
-        args=(
-            job_id,
-            input_file,
-            output_file,
-            output_format
-        ),
-
-        daemon=True
-
-    )
-
-
-    thread.start()
-
-
-    # --------------------------------------------------------
-    # RETURN JOB ID
-    # --------------------------------------------------------
-
-    return jsonify({
-
-        "job_id": job_id,
-
-        "status": "starting"
-
-    })
-
-
-# ============================================================
+# =========================================================
 # PROGRESS
-# ============================================================
+# =========================================================
 
-@app.route("/progress")
-def progress():
-
-    job_id = request.args.get("id")
-
-
-    if not job_id:
-
-        return jsonify({
-            "error": "Missing job ID"
-        }), 400
-
+@app.route("/progress/<job_id>", methods=["GET"])
+def progress(job_id):
 
     if job_id not in jobs:
 
         return jsonify({
             "error": "Job not found"
         }), 404
-
-
-    return jsonify(
-        jobs[job_id]
-    )
-
-
-# ============================================================
-# DOWNLOAD
-# ============================================================
-
-@app.route("/download")
-def download():
-
-    job_id = request.args.get("id")
-
-
-    if not job_id:
-
-        return jsonify({
-            "error": "Missing job ID"
-        }), 400
-
-
-    if job_id not in jobs:
-
-        return jsonify({
-            "error": "Job not found"
-        }), 404
-
 
     job = jobs[job_id]
 
+    response = {
+        "status": job["status"],
+        "progress": job["progress"],
+        "message": job["message"]
+    }
 
-    if job.get("status") != "completed":
+    if job["status"] == "completed":
+
+        response["download_url"] = (
+            f"/download/{job_id}"
+        )
+
+    if job["status"] == "failed":
+
+        response["error"] = job.get(
+            "error",
+            job["message"]
+        )
+
+    return jsonify(response)
+
+
+# =========================================================
+# DOWNLOAD
+# =========================================================
+
+@app.route("/download/<job_id>", methods=["GET"])
+def download(job_id):
+
+    if job_id not in jobs:
 
         return jsonify({
-            "error": "Conversion not completed"
-        }), 400
-
-
-    filename = job.get("filename")
-
-
-    if not filename:
-
-        return jsonify({
-            "error": "Output filename not found"
+            "error": "Job not found"
         }), 404
 
+    job = jobs[job_id]
 
-    output_file = os.path.join(
-        TEMP_DIR,
-        filename
-    )
+    if job["status"] != "completed":
 
+        return jsonify({
+            "error": "Conversion is not completed"
+        }), 400
 
-    if not os.path.exists(output_file):
+    output_path = job["output"]
+
+    if not output_path or not os.path.exists(output_path):
 
         return jsonify({
             "error": "Output file not found"
         }), 404
 
-
     return send_file(
-
-        output_file,
-
+        output_path,
         as_attachment=True,
-
-        download_name=filename
-
+        download_name=os.path.basename(output_path)
     )
 
 
-# ============================================================
-# SERVER
-# ============================================================
+# =========================================================
+# ERROR EXTRACTION
+# =========================================================
+
+def get_ffmpeg_error(stderr):
+
+    if not stderr:
+        return "Unknown FFmpeg error."
+
+    lines = stderr.strip().splitlines()
+
+    useful_lines = []
+
+    for line in reversed(lines):
+
+        line = line.strip()
+
+        if line:
+
+            useful_lines.append(line)
+
+        if len(useful_lines) >= 3:
+            break
+
+    useful_lines.reverse()
+
+    return " | ".join(useful_lines)
+
+
+# =========================================================
+# CLEANUP
+# =========================================================
+
+def cleanup_file(path):
+
+    try:
+
+        if path and os.path.exists(path):
+            os.remove(path)
+
+    except Exception as e:
+
+        print(
+            "Cleanup error:",
+            str(e)
+        )
+
+
+# =========================================================
+# START SERVER
+# =========================================================
 
 if __name__ == "__main__":
 
@@ -654,13 +463,8 @@ if __name__ == "__main__":
         )
     )
 
-
     app.run(
-
         host="0.0.0.0",
-
         port=port,
-
-        threaded=True
-
+        debug=False
     )
