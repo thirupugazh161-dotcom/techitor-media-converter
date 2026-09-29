@@ -137,10 +137,14 @@ def convert_media():
             "error": "Unsupported input file format."
         }), 400
 
-    # Requested output format
-    output_format = request.form.get(
-        "format",
-        "mp3"
+    # --------------------------------------------------
+    # REQUESTED OUTPUT FORMAT
+    # --------------------------------------------------
+
+    output_format = (
+        request.form.get("format")
+        or request.form.get("output_format")
+        or "mp3"
     ).lower()
 
     if output_format not in ALLOWED_EXTENSIONS:
@@ -193,7 +197,10 @@ def convert_media():
         input_path,
     ]
 
-    # Audio output
+    # --------------------------------------------------
+    # AUDIO OUTPUT
+    # --------------------------------------------------
+
     if output_format == "mp3":
 
         command += [
@@ -222,7 +229,10 @@ def convert_media():
             "192k",
         ]
 
-    # Video outputs
+    # --------------------------------------------------
+    # VIDEO OUTPUT
+    # --------------------------------------------------
+
     elif output_format in [
         "mp4",
         "mov",
@@ -230,6 +240,7 @@ def convert_media():
         "webm"
     ]:
 
+        # WEBM
         if output_format == "webm":
 
             command += [
@@ -239,10 +250,17 @@ def convert_media():
                 "0:a?",
                 "-c:v",
                 "libvpx-vp9",
+                "-crf",
+                "30",
+                "-b:v",
+                "0",
                 "-c:a",
                 "libopus",
+                "-b:a",
+                "128k",
             ]
 
+        # MP4 / MOV / MKV
         else:
 
             command += [
@@ -256,11 +274,17 @@ def convert_media():
                 "medium",
                 "-crf",
                 "23",
+                "-pix_fmt",
+                "yuv420p",
                 "-c:a",
                 "aac",
                 "-b:a",
                 "192k",
             ]
+
+    # --------------------------------------------------
+    # OUTPUT FILE
+    # --------------------------------------------------
 
     command.append(output_path)
 
@@ -321,7 +345,6 @@ def convert_media():
         download_name=output_filename
     )
 
-    # Prevent caching
     response.headers["Cache-Control"] = "no-store"
 
     return response
