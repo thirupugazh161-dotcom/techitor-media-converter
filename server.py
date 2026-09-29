@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Techitor Media Converter is running!"
+    return send_file(os.path.join(os.path.dirname(__file__), "index.html"))
 
 @app.route("/convert", methods=["POST"])
 def convert():
