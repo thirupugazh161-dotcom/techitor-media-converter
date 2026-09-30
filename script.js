@@ -1,630 +1,595 @@
-document.addEventListener("DOMContentLoaded", () => {
+const MAX_FILES = 7;
 
-    // --------------------------------------------------
-    // ELEMENTS
-    // --------------------------------------------------
+const browseBtn = document.getElementById("browseBtn");
+const fileInput = document.getElementById("fileInput");
+const dropZone = document.getElementById("dropZone");
+const filesContainer = document.getElementById("filesContainer");
 
-    const dropZone = document.getElementById("dropZone");
-    const browseBtn = document.getElementById("browseBtn");
-    const fileInput = document.getElementById("fileInput");
-
-    const fileSection = document.getElementById("fileSection");
-
-    const fileName = document.getElementById("fileName");
-    const fileSize = document.getElementById("fileSize");
-
-    const removeBtn = document.getElementById("removeBtn");
-
-    const formatSelect = document.getElementById("formatSelect");
-    const convertBtn = document.getElementById("convertBtn");
-
-    const progressSection =
-        document.getElementById("progressSection");
-
-    const progressText =
-        document.getElementById("progressText");
-
-    const progressPercent =
-        document.getElementById("progressPercent");
-
-    const progressFill =
-        document.getElementById("progressFill");
-
-    const timeRemaining =
-        document.getElementById("timeRemaining");
-
-    const downloadSection =
-        document.getElementById("downloadSection");
-
-    const downloadBtn =
-        document.getElementById("downloadBtn");
-
-    const successMessage =
-        document.getElementById("successMessage");
+let filesList = [];
 
 
-    // --------------------------------------------------
-    // MULTI FILE ELEMENTS
-    // --------------------------------------------------
+/* =========================================
+   BROWSE
+========================================= */
 
-    const addMoreFiles =
-        document.getElementById("addMoreFiles");
-
-    const addMoreBtn =
-        document.getElementById("addMoreBtn");
-
-    const fileCount =
-        document.getElementById("fileCount");
-
-    const MAX_FILES = 7;
+browseBtn.addEventListener("click", () => {
+    fileInput.click();
+});
 
 
-    // --------------------------------------------------
-    // STATE
-    // --------------------------------------------------
+fileInput.addEventListener("change", (event) => {
 
-    let selectedFile = null;
+    const selectedFiles = Array.from(event.target.files);
 
-    let selectedFileCount = 0;
+    addFiles(selectedFiles);
+
+    // Allows selecting same file again later
+    fileInput.value = "";
+});
 
 
-    // --------------------------------------------------
-    // FORMAT FILE SIZE
-    // --------------------------------------------------
+/* =========================================
+   DRAG & DROP
+========================================= */
 
-    function formatFileSize(bytes) {
+dropZone.addEventListener("dragover", (event) => {
 
-        if (bytes === 0) {
-            return "0 Bytes";
-        }
+    event.preventDefault();
 
-        const units = [
-            "Bytes",
-            "KB",
-            "MB",
-            "GB"
-        ];
+    dropZone.classList.add("drag-active");
+});
 
-        const i =
-            Math.floor(
-                Math.log(bytes) /
-                Math.log(1024)
-            );
 
-        return (
-            parseFloat(
-                (
-                    bytes /
-                    Math.pow(1024, i)
-                ).toFixed(2)
-            )
-            + " "
-            + units[i]
-        );
+dropZone.addEventListener("dragleave", () => {
+
+    dropZone.classList.remove("drag-active");
+});
+
+
+dropZone.addEventListener("drop", (event) => {
+
+    event.preventDefault();
+
+    dropZone.classList.remove("drag-active");
+
+    const droppedFiles = Array.from(event.dataTransfer.files);
+
+    addFiles(droppedFiles);
+});
+
+
+/* =========================================
+   ADD FILES
+========================================= */
+
+function addFiles(newFiles) {
+
+    if (!newFiles.length) {
+        return;
+    }
+
+    if (filesList.length >= MAX_FILES) {
+
+        alert("Maximum 7 files allowed.");
+
+        return;
     }
 
 
-    // --------------------------------------------------
-    // SELECT FILE
-    // --------------------------------------------------
+    const remainingSlots = MAX_FILES - filesList.length;
 
-    function selectFile(file) {
+    const filesToAdd = newFiles.slice(0, remainingSlots);
 
-        if (!file) {
+
+    filesToAdd.forEach((file) => {
+
+        const fileObject = {
+            id: crypto.randomUUID(),
+            file: file,
+            outputFormat: "mp4",
+            converting: false,
+            completed: false
+        };
+
+        filesList.push(fileObject);
+
+        createFileCard(fileObject);
+    });
+
+
+    updateFileCount();
+
+
+    if (newFiles.length > remainingSlots) {
+
+        alert("Only 7 files can be added at a time.");
+    }
+}
+
+
+/* =========================================
+   FILE CARD
+========================================= */
+
+function createFileCard(fileObject) {
+
+    const card = document.createElement("section");
+
+    card.className = "file-card";
+
+    card.dataset.id = fileObject.id;
+
+
+    const sizeMB =
+        (fileObject.file.size / (1024 * 1024)).toFixed(2);
+
+
+    card.innerHTML = `
+
+        <div class="file-header">
+
+            <div>
+
+                <h3 class="file-name">
+                    ${escapeHtml(fileObject.file.name)}
+                </h3>
+
+                <p class="file-size">
+                    ${sizeMB} MB
+                </p>
+
+            </div>
+
+            <button
+                type="button"
+                class="remove-btn"
+                data-action="remove"
+            >
+                ×
+            </button>
+
+        </div>
+
+
+        <label class="format-label">
+            Convert To
+        </label>
+
+
+        <select class="format-select">
+
+            <option value="mp3">MP3</option>
+            <option value="wav">WAV</option>
+            <option value="m4a">M4A</option>
+            <option value="mp4" selected>MP4</option>
+            <option value="mov">MOV</option>
+            <option value="mkv">MKV</option>
+            <option value="webm">WEBM</option>
+
+        </select>
+
+
+        <button
+            type="button"
+            class="convert-btn"
+            data-action="convert"
+        >
+            Convert
+        </button>
+
+
+        <div class="add-more-files">
+
+            <button
+                type="button"
+                class="add-more-btn"
+                data-action="add"
+            >
+                + Add Another File
+            </button>
+
+            <p class="file-count">
+                ${filesList.length} / ${MAX_FILES} files
+            </p>
+
+        </div>
+
+
+        <div class="progress-section hidden">
+
+            <div class="progress-info">
+
+                <span class="progress-text">
+                    Preparing conversion...
+                </span>
+
+                <span class="progress-percent">
+                    0%
+                </span>
+
+            </div>
+
+
+            <div class="progress-bar">
+
+                <div class="progress-fill"></div>
+
+            </div>
+
+
+            <p class="time-remaining">
+                Preparing conversion...
+            </p>
+
+        </div>
+
+
+        <div class="download-section hidden">
+
+            <p class="success-message">
+                Conversion completed successfully!
+            </p>
+
+            <a
+                class="download-btn"
+                target="_blank"
+                download
+            >
+                Download File
+            </a>
+
+        </div>
+    `;
+
+
+    filesContainer.appendChild(card);
+
+
+    const formatSelect =
+        card.querySelector(".format-select");
+
+
+    formatSelect.addEventListener("change", () => {
+
+        fileObject.outputFormat = formatSelect.value;
+    });
+
+
+    card.addEventListener("click", (event) => {
+
+        const actionElement =
+            event.target.closest("[data-action]");
+
+        if (!actionElement) {
             return;
         }
 
-        selectedFile = file;
 
-        fileName.textContent =
-            file.name;
-
-        fileSize.textContent =
-            formatFileSize(file.size);
-
-        fileSection.classList.remove(
-            "hidden"
-        );
-
-        downloadSection.classList.add(
-            "hidden"
-        );
-
-        progressSection.classList.add(
-            "hidden"
-        );
-
-        progressFill.style.width =
-            "0%";
-
-        progressPercent.textContent =
-            "0%";
-
-        progressText.textContent =
-            "Ready to convert";
-
-        timeRemaining.textContent =
-            "Select an output format and click Convert.";
+        const action =
+            actionElement.dataset.action;
 
 
-        // --------------------------------------------------
-        // SHOW ADD ANOTHER FILE
-        // --------------------------------------------------
+        if (action === "remove") {
 
-        selectedFileCount = 1;
+            removeFile(fileObject.id);
 
-        if (addMoreFiles) {
-
-            addMoreFiles.classList.remove(
-                "hidden"
-            );
-        }
-
-        if (fileCount) {
-
-            fileCount.textContent =
-                selectedFileCount +
-                " / " +
-                MAX_FILES +
-                " files";
-        }
-    }
-
-
-    // --------------------------------------------------
-    // BROWSE
-    // --------------------------------------------------
-
-    browseBtn.addEventListener(
-        "click",
-        () => {
+        } else if (action === "add") {
 
             fileInput.click();
 
+        } else if (action === "convert") {
+
+            convertFile(fileObject, card);
         }
-    );
+
+    });
+}
 
 
-    // --------------------------------------------------
-    // FILE INPUT
-    // --------------------------------------------------
+/* =========================================
+   REMOVE FILE
+========================================= */
 
-    fileInput.addEventListener(
-        "change",
-        () => {
+function removeFile(id) {
 
-            const file =
-                fileInput.files[0];
-
-            selectFile(file);
-
-        }
-    );
+    const index =
+        filesList.findIndex(item => item.id === id);
 
 
-    // --------------------------------------------------
-    // ADD ANOTHER FILE
-    // --------------------------------------------------
-
-    if (addMoreBtn) {
-
-        addMoreBtn.addEventListener(
-            "click",
-            () => {
-
-                if (
-                    selectedFileCount >=
-                    MAX_FILES
-                ) {
-
-                    alert(
-                        "Maximum 7 files allowed."
-                    );
-
-                    return;
-                }
-
-                fileInput.value = "";
-
-                fileInput.click();
-
-            }
-        );
+    if (index === -1) {
+        return;
     }
 
 
-    // --------------------------------------------------
-    // DRAG OVER
-    // --------------------------------------------------
+    filesList.splice(index, 1);
 
-    dropZone.addEventListener(
-        "dragover",
-        (event) => {
 
-            event.preventDefault();
+    const card =
+        filesContainer.querySelector(
+            `[data-id="${id}"]`
+        );
 
-            dropZone.classList.add(
-                "dragging"
-            );
 
+    if (card) {
+        card.remove();
+    }
+
+
+    updateFileCount();
+}
+
+
+/* =========================================
+   UPDATE COUNT
+========================================= */
+
+function updateFileCount() {
+
+    const cards =
+        filesContainer.querySelectorAll(".file-card");
+
+
+    cards.forEach((card) => {
+
+        const count =
+            card.querySelector(".file-count");
+
+        if (count) {
+
+            count.textContent =
+                `${filesList.length} / ${MAX_FILES} files`;
         }
-    );
+    });
+}
 
 
-    // --------------------------------------------------
-    // DRAG LEAVE
-    // --------------------------------------------------
+/* =========================================
+   CONVERT
+========================================= */
 
-    dropZone.addEventListener(
-        "dragleave",
-        () => {
+async function convertFile(fileObject, card) {
 
-            dropZone.classList.remove(
-                "dragging"
-            );
-
-        }
-    );
+    if (fileObject.converting) {
+        return;
+    }
 
 
-    // --------------------------------------------------
-    // DROP
-    // --------------------------------------------------
+    const formatSelect =
+        card.querySelector(".format-select");
 
-    dropZone.addEventListener(
-        "drop",
-        (event) => {
+    const convertBtn =
+        card.querySelector(".convert-btn");
 
-            event.preventDefault();
+    const progressSection =
+        card.querySelector(".progress-section");
 
-            dropZone.classList.remove(
-                "dragging"
-            );
+    const progressFill =
+        card.querySelector(".progress-fill");
 
-            const file =
-                event.dataTransfer.files[0];
+    const progressText =
+        card.querySelector(".progress-text");
 
-            selectFile(file);
+    const progressPercent =
+        card.querySelector(".progress-percent");
 
-        }
-    );
+    const timeRemaining =
+        card.querySelector(".time-remaining");
+
+    const downloadSection =
+        card.querySelector(".download-section");
+
+    const downloadBtn =
+        card.querySelector(".download-btn");
+
+    const successMessage =
+        card.querySelector(".success-message");
 
 
-    // --------------------------------------------------
-    // REMOVE FILE
-    // --------------------------------------------------
+    const outputFormat =
+        formatSelect.value;
 
-    removeBtn.addEventListener(
-        "click",
-        () => {
 
-            selectedFile = null;
+    fileObject.outputFormat =
+        outputFormat;
 
-            selectedFileCount = 0;
+    fileObject.converting = true;
 
-            fileInput.value = "";
 
-            fileSection.classList.add(
-                "hidden"
-            );
+    convertBtn.disabled = true;
 
-            progressSection.classList.add(
-                "hidden"
-            );
+    convertBtn.textContent = "Converting...";
 
-            downloadSection.classList.add(
-                "hidden"
-            );
+    progressSection.classList.remove("hidden");
+
+    downloadSection.classList.add("hidden");
+
+
+    progressFill.style.width = "0%";
+
+    progressPercent.textContent = "0%";
+
+    progressText.textContent =
+        "Preparing conversion...";
+
+    timeRemaining.textContent =
+        "Preparing conversion...";
+
+
+    /*
+     * Fake initial progress so the UI doesn't look frozen.
+     * Real conversion result is still controlled by server.
+     */
+
+    let fakeProgress = 0;
+
+    const progressTimer = setInterval(() => {
+
+        if (fakeProgress < 90) {
+
+            fakeProgress += 1;
 
             progressFill.style.width =
-                "0%";
-
-
-            // Hide add-more section
-
-            if (addMoreFiles) {
-
-                addMoreFiles.classList.add(
-                    "hidden"
-                );
-            }
-
-            if (fileCount) {
-
-                fileCount.textContent =
-                    "0 / " +
-                    MAX_FILES +
-                    " files";
-            }
-
-        }
-    );
-
-
-    // --------------------------------------------------
-    // CONVERT
-    // --------------------------------------------------
-
-    convertBtn.addEventListener(
-        "click",
-        async () => {
-
-            if (!selectedFile) {
-
-                alert(
-                    "Please select a file first."
-                );
-
-                return;
-            }
-
-
-            const outputFormat =
-                formatSelect.value;
-
-
-            // --------------------------------------------------
-            // DISABLE BUTTON
-            // --------------------------------------------------
-
-            convertBtn.disabled = true;
-
-            convertBtn.textContent =
-                "Converting...";
-
-
-            // --------------------------------------------------
-            // SHOW PROGRESS
-            // --------------------------------------------------
-
-            progressSection.classList.remove(
-                "hidden"
-            );
-
-            downloadSection.classList.add(
-                "hidden"
-            );
-
-            progressText.textContent =
-                "Uploading file...";
+                `${fakeProgress}%`;
 
             progressPercent.textContent =
-                "0%";
+                `${fakeProgress}%`;
 
-            progressFill.style.width =
-                "0%";
-
-            timeRemaining.textContent =
-                "Preparing conversion...";
-
-
-            // --------------------------------------------------
-            // FORM DATA
-            // --------------------------------------------------
-
-            const formData =
-                new FormData();
-
-            formData.append(
-                "file",
-                selectedFile
-            );
-
-            formData.append(
-                "format",
-                outputFormat
-            );
-
-
-            // --------------------------------------------------
-            // FAKE PROGRESS WHILE SERVER WORKS
-            // --------------------------------------------------
-
-            let progress = 0;
-
-            const progressTimer =
-                setInterval(
-                    () => {
-
-                        if (progress < 90) {
-
-                            progress += 1;
-
-                            progressFill.style.width =
-                                progress + "%";
-
-                            progressPercent.textContent =
-                                progress + "%";
-
-                            progressText.textContent =
-                                "Converting...";
-                        }
-
-                    },
-                    250
-                );
-
-
-            // --------------------------------------------------
-            // SEND TO SERVER
-            // --------------------------------------------------
-
-            try {
-
-                const response =
-                    await fetch(
-                        "/api/convert",
-                        {
-                            method: "POST",
-                            body: formData
-                        }
-                    );
-
-
-                clearInterval(
-                    progressTimer
-                );
-
-
-                // --------------------------------------------------
-                // ERROR
-                // --------------------------------------------------
-
-                if (!response.ok) {
-
-                    let errorMessage =
-                        "Conversion failed.";
-
-                    try {
-
-                        const errorData =
-                            await response.json();
-
-                        if (
-                            errorData.error
-                        ) {
-
-                            errorMessage =
-                                errorData.error;
-                        }
-
-                        if (
-                            errorData.details
-                        ) {
-
-                            console.error(
-                                errorData.details
-                            );
-                        }
-
-                    } catch (e) {
-
-                        // Response wasn't JSON
-                    }
-
-                    throw new Error(
-                        errorMessage
-                    );
-                }
-
-
-                // --------------------------------------------------
-                // GET FILE
-                // --------------------------------------------------
-
-                const blob =
-                    await response.blob();
-
-
-                // --------------------------------------------------
-                // FINISH PROGRESS
-                // --------------------------------------------------
-
-                progressFill.style.width =
-                    "100%";
-
-                progressPercent.textContent =
-                    "100%";
-
-                progressText.textContent =
-                    "Conversion complete";
-
-                timeRemaining.textContent =
-                    "Your file is ready to download.";
-
-
-                // --------------------------------------------------
-                // DOWNLOAD
-                // --------------------------------------------------
-
-                const url =
-                    window.URL.createObjectURL(
-                        blob
-                    );
-
-                downloadBtn.href =
-                    url;
-
-                downloadBtn.download =
-                    getDownloadName(
-                        selectedFile.name,
-                        outputFormat
-                    );
-
-
-                downloadSection.classList.remove(
-                    "hidden"
-                );
-
-
-                successMessage.textContent =
-                    "Conversion completed successfully!";
-
-
-            } catch (error) {
-
-                console.error(
-                    "Conversion error:",
-                    error
-                );
-
-                progressText.textContent =
-                    "Conversion failed";
-
-                timeRemaining.textContent =
-                    error.message;
-
-                progressFill.style.width =
-                    "0%";
-
-                progressPercent.textContent =
-                    "0%";
-
-            } finally {
-
-                convertBtn.disabled =
-                    false;
-
-                convertBtn.textContent =
-                    "Convert";
-            }
+            progressText.textContent =
+                "Converting...";
 
         }
-    );
+
+    }, 500);
 
 
-    // --------------------------------------------------
-    // DOWNLOAD NAME
-    // --------------------------------------------------
+    try {
 
-    function getDownloadName(
-        originalName,
-        extension
-    ) {
+        const formData = new FormData();
 
-        const lastDot =
-            originalName.lastIndexOf(".");
-
-
-        let baseName =
-            originalName;
-
-
-        if (lastDot !== -1) {
-
-            baseName =
-                originalName.substring(
-                    0,
-                    lastDot
-                );
-        }
-
-
-        return (
-            baseName +
-            "_converted." +
-            extension
+        formData.append(
+            "file",
+            fileObject.file
         );
-    }
 
-});
+        formData.append(
+            "format",
+            outputFormat
+        );
+
+
+        const response =
+            await fetch("/api/convert", {
+
+                method: "POST",
+
+                body: formData
+            });
+
+
+        clearInterval(progressTimer);
+
+
+        let data = null;
+
+        try {
+
+            data = await response.json();
+
+        } catch (jsonError) {
+
+            throw new Error(
+                "Server returned an invalid response."
+            );
+        }
+
+
+        if (!response.ok || !data.success) {
+
+            throw new Error(
+                data?.error ||
+                data?.details ||
+                "Conversion failed."
+            );
+        }
+
+
+        /*
+         * SUCCESS
+         */
+
+        progressFill.style.width = "100%";
+
+        progressPercent.textContent = "100%";
+
+        progressText.textContent =
+            "Conversion completed!";
+
+        timeRemaining.textContent =
+            "Ready to download.";
+
+
+        fileObject.completed = true;
+
+
+        if (data.download_url) {
+
+            downloadBtn.href =
+                data.download_url;
+
+        } else if (data.file_url) {
+
+            downloadBtn.href =
+                data.file_url;
+
+        } else if (data.download) {
+
+            downloadBtn.href =
+                data.download;
+
+        } else {
+
+            throw new Error(
+                "Conversion completed, but download URL was not returned."
+            );
+        }
+
+
+        if (data.filename) {
+
+            downloadBtn.download =
+                data.filename;
+        }
+
+
+        successMessage.textContent =
+            "Conversion completed successfully!";
+
+
+        downloadSection.classList.remove("hidden");
+
+
+        convertBtn.textContent =
+            "Convert Again";
+
+    } catch (error) {
+
+        clearInterval(progressTimer);
+
+
+        progressFill.style.width = "0%";
+
+        progressPercent.textContent = "0%";
+
+        progressText.textContent =
+            "Conversion failed";
+
+        timeRemaining.textContent =
+            error.message ||
+            "Conversion failed.";
+
+
+        convertBtn.disabled = false;
+
+        convertBtn.textContent =
+            "Convert";
+
+    } finally {
+
+        fileObject.converting = false;
+    }
+}
+
+
+/* =========================================
+   HTML ESCAPE
+========================================= */
+
+function escapeHtml(value) {
+
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
