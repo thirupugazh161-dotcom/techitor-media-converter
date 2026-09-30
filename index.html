@@ -16,6 +16,7 @@
 
         <div class="brand">
             <img src="techitor-logo.png" alt="Techitor Logo">
+
             <div>
                 <h1>TECHITOR'S MEDIA CONVERTER</h1>
                 <p>Convert • Transform • Create</p>
@@ -47,10 +48,12 @@
                 Browse File
             </button>
 
+            <!-- MULTIPLE FILE SUPPORT -->
             <input
                 type="file"
                 id="fileInput"
                 accept="audio/*,video/*"
+                multiple
                 hidden
             >
 
@@ -65,20 +68,29 @@
         <section id="fileSection" class="file-section hidden">
 
             <div class="file-header">
+
                 <div>
                     <h3 id="fileName">No file selected</h3>
                     <p id="fileSize">0 MB</p>
                 </div>
 
-                <button id="removeBtn" class="remove-btn">
+                <button
+                    id="removeBtn"
+                    class="remove-btn"
+                    type="button"
+                >
                     ×
                 </button>
+
             </div>
 
 
-            <label for="formatSelect">Convert To</label>
+            <label for="formatSelect">
+                Convert To
+            </label>
 
             <select id="formatSelect">
+
                 <option value="mp3">MP3</option>
                 <option value="wav">WAV</option>
                 <option value="m4a">M4A</option>
@@ -86,25 +98,44 @@
                 <option value="mov">MOV</option>
                 <option value="mkv">MKV</option>
                 <option value="webm">WEBM</option>
+
             </select>
 
 
-            <button id="convertBtn" class="convert-btn">
+            <button
+                id="convertBtn"
+                class="convert-btn"
+                type="button"
+            >
                 Convert
             </button>
 
 
             <!-- PROGRESS -->
-            <div id="progressSection" class="progress-section hidden">
+            <div
+                id="progressSection"
+                class="progress-section hidden"
+            >
 
                 <div class="progress-info">
-                    <span id="progressText">Converting...</span>
-                    <span id="progressPercent">0%</span>
+
+                    <span id="progressText">
+                        Converting...
+                    </span>
+
+                    <span id="progressPercent">
+                        0%
+                    </span>
+
                 </div>
 
+
                 <div class="progress-bar">
+
                     <div id="progressFill"></div>
+
                 </div>
+
 
                 <p id="timeRemaining">
                     Preparing conversion...
@@ -114,13 +145,19 @@
 
 
             <!-- DOWNLOAD -->
-            <div id="downloadSection" class="download-section hidden">
+            <div
+                id="downloadSection"
+                class="download-section hidden"
+            >
 
                 <p id="successMessage">
                     Conversion completed successfully!
                 </p>
 
-                <a id="downloadBtn" class="download-btn">
+                <a
+                    id="downloadBtn"
+                    class="download-btn"
+                >
                     Download File
                 </a>
 
@@ -129,10 +166,32 @@
         </section>
 
 
+        <!-- ADD MORE FILES -->
+        <div
+            id="addMoreFiles"
+            class="add-more-files hidden"
+        >
+
+            <button
+                id="addMoreBtn"
+                type="button"
+            >
+                + Add Another File
+            </button>
+
+            <p id="fileCount">
+                1 / 7 files
+            </p>
+
+        </div>
+
+
         <!-- SUPPORT -->
         <section class="support-section">
 
-            <h2>☕ Enjoying Techitor's tools?</h2>
+            <h2>
+                ☕ Enjoying Techitor's tools?
+            </h2>
 
             <p>
                 If this tool helped you, you can support the creator
@@ -146,7 +205,10 @@
             >
 
             <p class="upi-text">
-                UPI ID: <strong>thirupugazhtilak@oksbi</strong>
+                UPI ID:
+                <strong>
+                    thirupugazhtilak@oksbi
+                </strong>
             </p>
 
             <p class="tea-text">
