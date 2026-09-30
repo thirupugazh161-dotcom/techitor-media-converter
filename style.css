@@ -1,101 +1,521 @@
-/* =========================================
-   ADD ANOTHER FILE
-   ========================================= */
-
-.add-more-files {
-    width: 100%;
-    margin-top: 12px;
-    padding: 12px;
+* {
     box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+}
+
+body {
+    background: #080c14;
+    color: #ffffff;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+}
+
+
+/* ================================
+   HEADER
+================================ */
+
+.header {
+    width: 100%;
+    border-bottom: 1px solid #202938;
+    background: #0b1019;
+    padding: 18px 20px;
+}
+
+.brand {
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.brand img {
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
+}
+
+.brand-text h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.brand-text p {
+    margin: 5px 0 0;
+    color: #8190aa;
+    font-size: 12px;
+}
+
+
+/* ================================
+   MAIN
+================================ */
+
+.container {
+    width: min(100% - 32px, 780px);
+    margin: 0 auto;
+    padding: 28px 0 40px;
+}
+
+.hero {
+    text-align: center;
+    margin-bottom: 22px;
+}
+
+.hero h2 {
+    margin: 0 0 6px;
+    font-size: 22px;
+}
+
+.hero p {
+    margin: 0;
+    color: #8795ad;
+}
+
+
+/* ================================
+   UPLOAD BOX
+================================ */
+
+.upload-box {
+    border: 1px dashed #3d4b63;
+    background: #111722;
+    border-radius: 10px;
+    min-height: 150px;
 
     display: flex;
     flex-direction: column;
-    align-items: center;
     justify-content: center;
+    align-items: center;
 
-    background: rgba(255, 255, 255, 0.035);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 10px;
-
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-
-    transition: all 0.2s ease;
-}
-
-/* Hide only when JS adds .hidden */
-.add-more-files.hidden {
-    display: none;
-}
-
-/* Add Another File button */
-#addMoreBtn {
-    width: 100%;
-    min-height: 42px;
-
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 8px;
-
-    background: rgba(255, 255, 255, 0.06);
-    color: #ffffff;
-
-    font-size: 14px;
-    font-weight: 600;
-
-    cursor: pointer;
-
-    transition:
-        background 0.2s ease,
-        border-color 0.2s ease,
-        transform 0.15s ease;
-}
-
-#addMoreBtn:hover {
-    background: rgba(255, 255, 255, 0.10);
-    border-color: rgba(255, 255, 255, 0.22);
-}
-
-#addMoreBtn:active {
-    transform: scale(0.98);
-}
-
-/* File counter */
-#fileCount {
-    margin: 8px 0 0;
-
-    color: #8ea0bd;
-    font-size: 12px;
-    font-weight: 500;
+    padding: 25px;
     text-align: center;
 }
 
+.upload-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #1b2b45;
 
-/* =========================================
-   KEEP ADD FILE INSIDE FILE CARD
-   ========================================= */
+    display: flex;
+    align-items: center;
+    justify-content: center;
 
-.file-section {
-    overflow: hidden;
+    color: #2580ff;
+    font-size: 22px;
+
+    margin-bottom: 10px;
+}
+
+.upload-box h3 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.upload-box p {
+    margin: 7px 0;
+    color: #77859e;
+}
+
+.upload-box button {
+    border: 0;
+    border-radius: 6px;
+    background: #1e73ea;
+    color: white;
+    padding: 9px 18px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.upload-box button:hover {
+    background: #287ff4;
+}
+
+.upload-box small {
+    margin-top: 12px;
+    color: #71809a;
+    font-size: 9px;
 }
 
 
-/* =========================================
+/* ================================
+   FILE CARDS
+================================ */
+
+.file-card {
+    margin-top: 14px;
+    padding: 20px;
+
+    background: #121923;
+    border: 1px solid #1e2938;
+    border-radius: 12px;
+
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+.file-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.file-name {
+    margin: 0;
+    font-size: 15px;
+    word-break: break-all;
+}
+
+.file-size {
+    margin: 5px 0 0;
+    color: #8291aa;
+    font-size: 12px;
+}
+
+.remove-btn {
+    width: 36px;
+    height: 36px;
+
+    border: 0;
+    border-radius: 9px;
+
+    background: #202c3d;
+    color: #ffffff;
+
+    font-size: 22px;
+    cursor: pointer;
+}
+
+.remove-btn:hover {
+    background: #29374b;
+}
+
+
+/* ================================
+   FORMAT
+================================ */
+
+.format-label {
+    display: block;
+    margin-top: 18px;
+    margin-bottom: 8px;
+    color: #aebbd0;
+}
+
+.format-select {
+    width: 100%;
+    height: 44px;
+
+    border: 1px solid #354258;
+    border-radius: 8px;
+
+    background: #080d15;
+    color: #ffffff;
+
+    padding: 0 14px;
+    font-size: 14px;
+    outline: none;
+}
+
+.format-select:focus {
+    border-color: #287ff4;
+}
+
+
+/* ================================
+   CONVERT BUTTON
+================================ */
+
+.convert-btn {
+    width: 100%;
+    height: 44px;
+
+    margin-top: 16px;
+
+    border: 0;
+    border-radius: 8px;
+
+    background: #2378ef;
+    color: #ffffff;
+
+    font-size: 14px;
+    font-weight: 700;
+
+    cursor: pointer;
+}
+
+.convert-btn:hover {
+    background: #2d82f8;
+}
+
+.convert-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+
+/* ================================
+   ADD ANOTHER FILE
+================================ */
+
+.add-more-files {
+    margin-top: 10px;
+    padding: 10px;
+
+    border: 1px solid #253247;
+    border-radius: 9px;
+
+    background: rgba(255, 255, 255, 0.025);
+
+    text-align: center;
+}
+
+.add-more-btn {
+    width: 100%;
+    min-height: 40px;
+
+    border: 1px solid #334158;
+    border-radius: 7px;
+
+    background: #171f2c;
+    color: #dce5f2;
+
+    font-size: 13px;
+    font-weight: 600;
+
+    cursor: pointer;
+}
+
+.add-more-btn:hover {
+    background: #202b3b;
+}
+
+.file-count {
+    margin: 7px 0 0;
+    color: #73829a;
+    font-size: 11px;
+}
+
+
+/* ================================
+   PROGRESS
+================================ */
+
+.progress-section {
+    margin-top: 18px;
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    margin-bottom: 8px;
+}
+
+.progress-text {
+    color: #d8e0eb;
+}
+
+.progress-percent {
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+
+    background: #273142;
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    width: 0%;
+    height: 100%;
+
+    background: #2378ef;
+
+    transition: width 0.25s ease;
+}
+
+.time-remaining {
+    margin: 10px 0 0;
+    text-align: center;
+
+    color: #8290a9;
+    font-size: 12px;
+}
+
+
+/* ================================
+   DOWNLOAD
+================================ */
+
+.download-section {
+    margin-top: 18px;
+    padding: 14px;
+
+    border-radius: 9px;
+    background: #101a27;
+    border: 1px solid #223047;
+
+    text-align: center;
+}
+
+.success-message {
+    margin: 0 0 12px;
+    color: #72d49a;
+}
+
+.download-btn {
+    display: inline-block;
+
+    padding: 10px 20px;
+
+    border-radius: 7px;
+
+    background: #2378ef;
+    color: #ffffff;
+
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.download-btn:hover {
+    background: #2d82f8;
+}
+
+
+/* ================================
+   SUPPORT
+================================ */
+
+.support-section {
+    margin-top: 20px;
+    padding: 22px;
+
+    background: #101721;
+    border: 1px solid #273244;
+    border-radius: 10px;
+
+    text-align: center;
+}
+
+.support-section h2 {
+    margin: 0 0 8px;
+    font-size: 15px;
+}
+
+.support-section p {
+    color: #8491a7;
+    font-size: 11px;
+}
+
+.support-qr {
+    width: 130px;
+    height: 130px;
+
+    object-fit: contain;
+
+    background: #ffffff;
+    padding: 7px;
+    border-radius: 6px;
+}
+
+.upi-text strong {
+    color: #dce4ef;
+}
+
+.tea-text {
+    color: #aebbd0 !important;
+}
+
+
+/* ================================
+   FOOTER
+================================ */
+
+footer {
+    border-top: 1px solid #202938;
+    padding: 18px;
+    text-align: center;
+}
+
+footer p {
+    margin: 5px 0;
+    color: #75839a;
+    font-size: 10px;
+}
+
+.social-links {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.social-links a {
+    padding: 6px 10px;
+
+    border: 1px solid #334158;
+    border-radius: 5px;
+
+    color: #d5deea;
+    text-decoration: none;
+
+    font-size: 10px;
+}
+
+.social-links a:hover {
+    background: #172132;
+}
+
+
+/* ================================
+   HIDDEN
+================================ */
+
+.hidden {
+    display: none !important;
+}
+
+
+/* ================================
    MOBILE
-   ========================================= */
+================================ */
 
 @media (max-width: 600px) {
 
-    .add-more-files {
-        margin-top: 10px;
-        padding: 10px;
+    .header {
+        padding: 14px;
     }
 
-    #addMoreBtn {
-        min-height: 40px;
-        font-size: 13px;
+    .brand img {
+        width: 48px;
+        height: 48px;
     }
 
-    #fileCount {
-        font-size: 11px;
+    .brand-text h1 {
+        font-size: 14px;
+    }
+
+    .container {
+        width: min(100% - 20px, 780px);
+        padding-top: 20px;
+    }
+
+    .file-card {
+        padding: 16px;
     }
 }
