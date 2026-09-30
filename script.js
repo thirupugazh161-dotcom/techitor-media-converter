@@ -49,6 +49,64 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let selectedFile = null;
 
+    // IMPORTANT:
+    // Keep timer outside the convert function so it can
+    // always be cleared when selecting/removing a file.
+    let progressTimer = null;
+
+    // Used to identify the latest conversion.
+    // Prevents an old conversion from updating a new file.
+    let conversionId = 0;
+
+    // Allows us to cancel the browser-side request
+    // when a new file is selected.
+    let activeController = null;
+
+
+    // --------------------------------------------------
+    // RESET PROGRESS
+    // --------------------------------------------------
+
+    function resetProgress() {
+
+        if (progressTimer !== null) {
+            clearInterval(progressTimer);
+            progressTimer = null;
+        }
+
+        progressFill.style.width = "0%";
+        progressPercent.textContent = "0%";
+
+        progressText.textContent =
+            "Ready to convert";
+
+        timeRemaining.textContent =
+            "Select an output format and click Convert.";
+    }
+
+
+    // --------------------------------------------------
+    // CANCEL CURRENT CONVERSION
+    // --------------------------------------------------
+
+    function cancelCurrentConversion() {
+
+        // Stop fake progress timer
+        if (progressTimer !== null) {
+            clearInterval(progressTimer);
+            progressTimer = null;
+        }
+
+        // Cancel browser fetch request
+        if (activeController !== null) {
+            activeController.abort();
+            activeController = null;
+        }
+
+        // Make every old async operation obsolete
+        conversionId++;
+    }
+
 
     // --------------------------------------------------
     // FORMAT FILE SIZE
@@ -94,6 +152,11 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        // IMPORTANT:
+        // Stop any previous conversion before accepting
+        // the new file.
+        cancelCurrentConversion();
+
         selectedFile = file;
 
         fileName.textContent = file.name;
@@ -116,6 +179,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
         timeRemaining.textContent =
             "Select an output format and click Convert.";
+
+        // Reset download link
+        downloadBtn.removeAttribute("href");
+
+        // Reset success message
+        successMessage.textContent = "";
     }
 
 
@@ -124,9 +193,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // --------------------------------------------------
 
     browseBtn.addEventListener("click", () => {
-
         fileInput.click();
-
     });
 
 
@@ -138,8 +205,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const file = fileInput.files[0];
 
-        selectFile(file);
-
+        if (file) {
+            selectFile(file);
+        }
     });
 
 
@@ -152,7 +220,6 @@ document.addEventListener("DOMContentLoaded", () => {
         event.preventDefault();
 
         dropZone.classList.add("dragging");
-
     });
 
 
@@ -163,7 +230,6 @@ document.addEventListener("DOMContentLoaded", () => {
     dropZone.addEventListener("dragleave", () => {
 
         dropZone.classList.remove("dragging");
-
     });
 
 
@@ -180,8 +246,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const file =
             event.dataTransfer.files[0];
 
-        selectFile(file);
-
+        if (file) {
+            selectFile(file);
+        }
     });
 
 
@@ -190,6 +257,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // --------------------------------------------------
 
     removeBtn.addEventListener("click", () => {
+
+        // Stop everything related to old file
+        cancelCurrentConversion();
 
         selectedFile = null;
 
@@ -203,6 +273,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
         progressFill.style.width = "0%";
 
+        progressPercent.textContent = "0%";
+
+        progressText.textContent =
+            "Ready to convert";
+
+        timeRemaining.textContent =
+            "Select an output format and click Convert.";
+
+        downloadBtn.removeAttribute("href");
+
+        successMessage.textContent = "";
+
+        convertBtn.disabled = false;
+
+        convertBtn.textContent = "Convert";
     });
 
 
@@ -220,18 +305,41 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
 
+        // --------------------------------------------------
+        // CANCEL ANY PREVIOUS CONVERSION
+        // --------------------------------------------------
+
+        cancelCurrentConversion();
+
+
+        // Create a unique ID for this conversion
+        const thisConversionId = conversionId;
+
+
         const outputFormat =
             formatSelect.value;
 
 
-        // Disable button
+        // Create AbortController for this request
+        const controller = new AbortController();
+
+        activeController = controller;
+
+
+        // --------------------------------------------------
+        // DISABLE BUTTON
+        // --------------------------------------------------
+
         convertBtn.disabled = true;
 
         convertBtn.textContent =
             "Converting...";
 
 
-        // Show progress
+        // --------------------------------------------------
+        // SHOW PROGRESS
+        // --------------------------------------------------
+
         progressSection.classList.remove("hidden");
 
         downloadSection.classList.add("hidden");
@@ -246,7 +354,7 @@ document.addEventListener("DOMContentLoaded", () => {
             "0%";
 
         timeRemaining.textContent =
-            "Preparing conversion...";
+            "Preparing conversion.";
 
 
         // --------------------------------------------------
@@ -268,30 +376,40 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
         // --------------------------------------------------
-        // FAKE PROGRESS WHILE SERVER WORKS
+        // FAKE PROGRESS
         // --------------------------------------------------
 
         let progress = 0;
 
-        const progressTimer =
-            setInterval(() => {
+        progressTimer = setInterval(() => {
 
-                if (progress < 90) {
+            // If this is no longer the active conversion,
+            // stop immediately.
+            if (thisConversionId !== conversionId) {
 
-                    progress += 1;
+                clearInterval(progressTimer);
 
-                    progressFill.style.width =
-                        progress + "%";
+                progressTimer = null;
 
-                    progressPercent.textContent =
-                        progress + "%";
+                return;
+            }
 
-                    progressText.textContent =
-                        "Converting...";
 
-                }
+            if (progress < 90) {
 
-            }, 250);
+                progress += 1;
+
+                progressFill.style.width =
+                    progress + "%";
+
+                progressPercent.textContent =
+                    progress + "%";
+
+                progressText.textContent =
+                    "Converting...";
+            }
+
+        }, 250);
 
 
         // --------------------------------------------------
@@ -305,12 +423,33 @@ document.addEventListener("DOMContentLoaded", () => {
                     "/api/convert",
                     {
                         method: "POST",
-                        body: formData
+                        body: formData,
+                        signal: controller.signal
                     }
                 );
 
 
-            clearInterval(progressTimer);
+            // --------------------------------------------------
+            // CHECK WHETHER THIS IS STILL THE ACTIVE
+            // CONVERSION
+            // --------------------------------------------------
+
+            if (thisConversionId !== conversionId) {
+
+                return;
+            }
+
+
+            // --------------------------------------------------
+            // STOP PROGRESS TIMER
+            // --------------------------------------------------
+
+            if (progressTimer !== null) {
+
+                clearInterval(progressTimer);
+
+                progressTimer = null;
+            }
 
 
             // --------------------------------------------------
@@ -331,21 +470,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
                         errorMessage =
                             errorData.error;
-
                     }
 
                     if (errorData.details) {
 
                         console.error(
+                            "Server details:",
                             errorData.details
                         );
-
                     }
 
                 } catch (e) {
 
-                    // Response wasn't JSON
+                    console.error(
+                        "Could not read error response:",
+                        e
+                    );
                 }
+
 
                 throw new Error(
                     errorMessage
@@ -354,14 +496,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
             // --------------------------------------------------
-            // GET FILE
+            // GET CONVERTED FILE
             // --------------------------------------------------
 
             const blob =
                 await response.blob();
 
 
-            // Finish progress
+            // Check one more time because
+            // file could have changed while downloading.
+            if (thisConversionId !== conversionId) {
+
+                return;
+            }
+
+
+            // --------------------------------------------------
+            // FINISH PROGRESS
+            // --------------------------------------------------
+
             progressFill.style.width =
                 "100%";
 
@@ -384,7 +537,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     blob
                 );
 
-
             downloadBtn.href = url;
 
             downloadBtn.download =
@@ -405,16 +557,47 @@ document.addEventListener("DOMContentLoaded", () => {
 
         } catch (error) {
 
+            // --------------------------------------------------
+            // IGNORE ABORTED / OLD REQUEST
+            // --------------------------------------------------
+
+            if (
+                error.name === "AbortError" ||
+                thisConversionId !== conversionId
+            ) {
+
+                return;
+            }
+
+
             console.error(
                 "Conversion error:",
                 error
             );
 
+
+            // --------------------------------------------------
+            // STOP TIMER ON EVERY ERROR
+            // --------------------------------------------------
+
+            if (progressTimer !== null) {
+
+                clearInterval(progressTimer);
+
+                progressTimer = null;
+            }
+
+
+            // --------------------------------------------------
+            // SHOW ERROR
+            // --------------------------------------------------
+
             progressText.textContent =
                 "Conversion failed";
 
             timeRemaining.textContent =
-                error.message;
+                error.message ||
+                "Something went wrong during conversion.";
 
             progressFill.style.width =
                 "0%";
@@ -422,13 +605,20 @@ document.addEventListener("DOMContentLoaded", () => {
             progressPercent.textContent =
                 "0%";
 
+
         } finally {
 
-            convertBtn.disabled = false;
+            // Only update the button if this is
+            // still the current conversion.
+            if (thisConversionId === conversionId) {
 
-            convertBtn.textContent =
-                "Convert";
+                convertBtn.disabled = false;
 
+                convertBtn.textContent =
+                    "Convert";
+
+                activeController = null;
+            }
         }
 
     });
@@ -458,7 +648,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     0,
                     lastDot
                 );
-
         }
 
 
@@ -467,7 +656,6 @@ document.addEventListener("DOMContentLoaded", () => {
             "_converted." +
             extension
         );
-
     }
 
 });
